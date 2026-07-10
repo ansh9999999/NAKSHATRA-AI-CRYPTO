@@ -71,3 +71,5 @@ def signal():
         return {
             "error": str(e)
         }
+import pandas as pd
+import numpy as np
