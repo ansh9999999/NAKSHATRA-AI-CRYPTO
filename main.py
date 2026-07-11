@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 import os
 import requests
-import pandas as pd
 
 from analysis.indicators import indicator_summary
 from analysis.signal import generate_signal
