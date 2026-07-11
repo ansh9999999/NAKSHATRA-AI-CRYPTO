@@ -5,7 +5,7 @@ import pandas as pd
 
 from analysis.indicators import indicator_summary
 from analysis.signal import generate_signal
-
+from history import get_history
 app = FastAPI(
     title="NAKSHATRA AI CRYPTO",
     description="AI Crypto Analysis API",
@@ -96,22 +96,11 @@ def signal():
 
 
 def get_dataframe():
-
-    r = requests.get(f"{BASE_URL}/tickers/BTCUSD")
-
-    data = r.json()["result"]
-
-    price = float(data["mark_price"])
-
-    df = pd.DataFrame({
-
-        "close": [price] * 60,
-        "high": [price * 1.002] * 60,
-        "low": [price * 0.998] * 60
-
-    })
-
-    return df
+    return get_history(
+        symbol="BTCUSD",
+        resolution="5m",
+        limit=200
+    )
 
 
 @app.get("/analysis")
