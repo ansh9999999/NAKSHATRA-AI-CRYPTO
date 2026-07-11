@@ -5,7 +5,7 @@ import requests
 from analysis.indicators import indicator_summary
 from analysis.signal import generate_signal
 from history import get_history
-import scheduler
+
 app = FastAPI(
     title="NAKSHATRA AI CRYPTO",
     description="AI Crypto Analysis API",
