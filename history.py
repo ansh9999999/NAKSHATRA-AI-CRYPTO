@@ -1,22 +1,60 @@
-import requests
 import pandas as pd
-from config import BASE_URL, BTC_SYMBOL
+
+from delta import get_candles
 
 
-def get_btc_history():
+def get_history(
+    symbol="BTCUSD",
+    resolution="5m",
+    limit=200
+):
 
-    url = f"{BASE_URL}/tickers/{BTC_SYMBOL}"
+    candles = get_candles(
+        symbol=symbol,
+        resolution=resolution,
+        limit=limit
+    )
 
-    r = requests.get(url, timeout=10)
+    df = pd.DataFrame(candles)
 
-    data = r.json()["result"]
+    # Delta API keys
+    rename = {}
 
-    price = float(data["mark_price"])
+    if "open" in df.columns:
+        rename["open"] = "open"
 
-    df = pd.DataFrame({
-        "close": [price] * 100,
-        "high": [price * 1.002] * 100,
-        "low": [price * 0.998] * 100
-    })
+    if "high" in df.columns:
+        rename["high"] = "high"
+
+    if "low" in df.columns:
+        rename["low"] = "low"
+
+    if "close" in df.columns:
+        rename["close"] = "close"
+
+    if "volume" in df.columns:
+        rename["volume"] = "volume"
+
+    df = df.rename(columns=rename)
+
+    numeric_cols = [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+    ]
+
+    for col in numeric_cols:
+
+        if col in df.columns:
+            df[col] = pd.to_numeric(
+                df[col],
+                errors="coerce"
+            )
+
+    df = df.dropna()
+
+    df = df.reset_index(drop=True)
 
     return df
