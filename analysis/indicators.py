@@ -3,23 +3,14 @@ import numpy as np
 
 
 def ema(close, period):
-    """
-    Exponential Moving Average
-    """
     return close.ewm(span=period, adjust=False).mean()
 
 
 def sma(close, period):
-    """
-    Simple Moving Average
-    """
     return close.rolling(period).mean()
 
 
 def rsi(close, period=14):
-    """
-    Relative Strength Index
-    """
 
     delta = close.diff()
 
@@ -31,7 +22,11 @@ def rsi(close, period=14):
 
     rs = avg_gain / avg_loss
 
-    return 100 - (100 / (1 + rs))
+    value = 100 - (100 / (1 + rs))
+
+    value = value.fillna(50)
+
+    return value
 
 
 def macd(close):
@@ -49,9 +44,7 @@ def macd(close):
 def atr(high, low, close, period=14):
 
     high_low = high - low
-
     high_close = abs(high - close.shift())
-
     low_close = abs(low - close.shift())
 
     tr = pd.concat(
@@ -59,7 +52,7 @@ def atr(high, low, close, period=14):
         axis=1
     ).max(axis=1)
 
-    return tr.rolling(period).mean()
+    return tr.rolling(period).mean().fillna(0)
 
 
 def trend(close):
@@ -93,21 +86,21 @@ def indicator_summary(df):
 
     return {
 
-        "price": float(close.iloc[-1]),
+        "price": round(float(close.iloc[-1]), 2),
 
-        "ema9": round(float(ema(close, 9).iloc[-1]), 2),
+        "ema9": round(float(ema(close, 9).fillna(0).iloc[-1]), 2),
 
-        "ema21": round(float(ema(close, 21).iloc[-1]), 2),
+        "ema21": round(float(ema(close, 21).fillna(0).iloc[-1]), 2),
 
-        "ema50": round(float(ema(close, 50).iloc[-1]), 2),
+        "ema50": round(float(ema(close, 50).fillna(0).iloc[-1]), 2),
 
         "rsi": round(float(rsi(close).iloc[-1]), 2),
 
-        "macd": round(float(macd_line.iloc[-1]), 4),
+        "macd": round(float(macd_line.fillna(0).iloc[-1]), 4),
 
-        "macd_signal": round(float(signal_line.iloc[-1]), 4),
+        "macd_signal": round(float(signal_line.fillna(0).iloc[-1]), 4),
 
-        "histogram": round(float(hist.iloc[-1]), 4),
+        "histogram": round(float(hist.fillna(0).iloc[-1]), 4),
 
         "atr": round(float(atr(high, low, close).iloc[-1]), 2),
 
