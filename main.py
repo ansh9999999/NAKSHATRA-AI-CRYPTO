@@ -1,20 +1,51 @@
 from fastapi import FastAPI
-import requests
 import os
+import requests
+import pandas as pd
+
+from analysis.indicators import indicator_summary
+from analysis.signal import generate_signal
 
 app = FastAPI(
     title="NAKSHATRA AI CRYPTO",
-    version="1.0"
+    description="AI Crypto Analysis API",
+    version="2.1"
 )
 
+API_KEY = os.getenv("DELTA_API_KEY")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
 BASE_URL = "https://api.india.delta.exchange/v2"
+
+
+def send_telegram(message):
+
+    if not BOT_TOKEN or not CHAT_ID:
+        return {
+            "success": False,
+            "error": "Telegram variables missing"
+        }
+
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
+    data = {
+        "chat_id": CHAT_ID,
+        "text": message
+    }
+
+    r = requests.post(url, data=data)
+
+    return r.json()
 
 
 @app.get("/")
 def home():
     return {
         "project": "NAKSHATRA AI CRYPTO",
-        "status": "Running"
+        "status": "Running",
+        "api_key_found": API_KEY is not None,
+        "telegram": BOT_TOKEN is not None
     }
 
 
@@ -30,62 +61,20 @@ def btc():
 
     try:
 
-        url = f"{BASE_URL}/tickers/BTCUSD"
-
-        r = requests.get(url, timeout=10)
+        r = requests.get(f"{BASE_URL}/tickers/BTCUSD")
 
         data = r.json()["result"]
 
         return {
-
-            "symbol": "BTCUSD",
-
-            "price": data["mark_price"],
-
-            "change_24h": data["mark_change_24h"],
-
-            "volume": data["volume"]
-
+            "success": True,
+            "result": data
         }
 
     except Exception as e:
 
         return {
-
+            "success": False,
             "error": str(e)
-
-        }
-
-
-@app.get("/eth")
-def eth():
-
-    try:
-
-        url = f"{BASE_URL}/tickers/ETHUSD"
-
-        r = requests.get(url, timeout=10)
-
-        data = r.json()["result"]
-
-        return {
-
-            "symbol": "ETHUSD",
-
-            "price": data["mark_price"],
-
-            "change_24h": data["mark_change_24h"],
-
-            "volume": data["volume"]
-
-        }
-
-    except Exception as e:
-
-        return {
-
-            "error": str(e)
-
         }
 
 
@@ -94,43 +83,53 @@ def signal():
 
     try:
 
-        url = f"{BASE_URL}/tickers/BTCUSD"
+        df = get_dataframe()
 
-        r = requests.get(url, timeout=10)
+        return generate_signal(df)
 
-        btc = r.json()["result"]
+    except Exception as e:
 
-        change = float(btc["mark_change_24h"])
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
-        if change >= 3:
 
-            sig = "STRONG BUY"
+def get_dataframe():
 
-        elif change >= 1:
+    r = requests.get(f"{BASE_URL}/tickers/BTCUSD")
 
-            sig = "BUY"
+    data = r.json()["result"]
 
-        elif change <= -3:
+    price = float(data["mark_price"])
 
-            sig = "STRONG SELL"
+    df = pd.DataFrame({
 
-        elif change <= -1:
+        "close": [price] * 60,
+        "high": [price * 1.002] * 60,
+        "low": [price * 0.998] * 60
 
-            sig = "SELL"
+    })
 
-        else:
+    return df
 
-            sig = "WAIT"
+
+@app.get("/analysis")
+def analysis():
+
+    try:
+
+        df = get_dataframe()
+
+        indicators = indicator_summary(df)
+
+        signal = generate_signal(df)
 
         return {
 
-            "symbol": "BTCUSD",
-
-            "price": btc["mark_price"],
-
-            "change_24h": change,
-
-            "signal": sig
+            "success": True,
+            "indicators": indicators,
+            "signal": signal
 
         }
 
@@ -138,6 +137,49 @@ def signal():
 
         return {
 
+            "success": False,
             "error": str(e)
 
+        }
+
+
+@app.get("/telegram")
+def telegram():
+
+    try:
+
+        df = get_dataframe()
+
+        signal = generate_signal(df)
+
+        message = f"""
+🚀 NAKSHATRA AI CRYPTO
+
+📊 Symbol : BTCUSD
+💰 Price : {signal['price']}
+
+📈 Trend : {signal['trend']}
+🎯 Signal : {signal['signal']}
+✅ Confidence : {signal['confidence']}%
+
+RSI : {signal['rsi']}
+EMA9 : {signal['ema9']}
+EMA21 : {signal['ema21']}
+
+Reasons:
+- {'\n- '.join(signal['reasons'])}
+"""
+
+        result = send_telegram(message)
+
+        return {
+            "success": True,
+            "telegram": result
+        }
+
+    except Exception as e:
+
+        return {
+            "success": False,
+            "error": str(e)
         }
