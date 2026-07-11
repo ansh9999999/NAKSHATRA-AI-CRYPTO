@@ -171,3 +171,24 @@ Reasons:
             "success": False,
             "error": str(e)
         }
+@app.get("/debug")
+def debug():
+
+    try:
+
+        df = get_dataframe()
+
+        return {
+            "success": True,
+            "rows": len(df),
+            "columns": list(df.columns),
+            "head": df.head(3).to_dict(orient="records"),
+            "tail": df.tail(3).to_dict(orient="records")
+        }
+
+    except Exception as e:
+
+        return {
+            "success": False,
+            "error": str(e)
+        }
