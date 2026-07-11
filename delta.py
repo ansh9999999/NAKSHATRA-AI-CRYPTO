@@ -1,50 +1,76 @@
 import requests
-from config import BASE_URL, BTC_SYMBOL, ETH_SYMBOL
+import time
+
+from config import BASE_URL
+
+SESSION = requests.Session()
 
 
-def get_ticker(symbol):
+def get_ticker(symbol="BTCUSD"):
 
-    try:
+    url = f"{BASE_URL}/tickers/{symbol}"
 
-        url = f"{BASE_URL}/tickers/{symbol}"
+    r = SESSION.get(url, timeout=15)
+    r.raise_for_status()
 
-        r = requests.get(url, timeout=10)
+    return r.json()["result"]
 
-        r.raise_for_status()
 
-        data = r.json()
+def get_candles(
+    symbol="BTCUSD",
+    resolution="5m",
+    limit=200
+):
 
-        if not data.get("success", False):
-            return None
+    now = int(time.time())
 
-        return data["result"]
+    seconds = {
+        "1m": 60,
+        "3m": 180,
+        "5m": 300,
+        "15m": 900,
+        "30m": 1800,
+        "1h": 3600,
+        "2h": 7200,
+        "4h": 14400,
+        "6h": 21600,
+        "1d": 86400,
+    }
 
-    except Exception as e:
+    candle_seconds = seconds[resolution]
 
-        return {
-            "error": str(e)
-        }
+    start = now - (limit * candle_seconds)
+
+    url = f"{BASE_URL}/history/candles"
+
+    params = {
+        "resolution": resolution,
+        "symbol": symbol,
+        "start": start,
+        "end": now
+    }
+
+    r = SESSION.get(
+        url,
+        params=params,
+        timeout=20
+    )
+
+    r.raise_for_status()
+
+    data = r.json()
+
+    if not data["success"]:
+        raise Exception("Delta API Error")
+
+    return data["result"]
 
 
 def get_btc():
 
-    return get_ticker(BTC_SYMBOL)
+    return get_ticker("BTCUSD")
 
 
 def get_eth():
 
-    return get_ticker(ETH_SYMBOL)
-
-
-def market_summary():
-
-    btc = get_btc()
-    eth = get_eth()
-
-    return {
-
-        "BTC": btc,
-
-        "ETH": eth
-
-    }
+    return get_ticker("ETHUSD")
