@@ -1,76 +1,72 @@
 import requests
 import time
 
-from config import BASE_URL
-
-SESSION = requests.Session()
+BASE_URL = "https://api.india.delta.exchange/v2"
 
 
-def get_ticker(symbol="BTCUSD"):
-
-    url = f"{BASE_URL}/tickers/{symbol}"
-
-    r = SESSION.get(url, timeout=15)
-    r.raise_for_status()
-
-    return r.json()["result"]
-
-
-def get_candles(
-    symbol="BTCUSD",
-    resolution="5m",
-    limit=200
-):
-
-    now = int(time.time())
+def get_candles(symbol="BTCUSD", resolution="5m", limit=200):
 
     seconds = {
         "1m": 60,
-        "3m": 180,
         "5m": 300,
         "15m": 900,
         "30m": 1800,
         "1h": 3600,
-        "2h": 7200,
         "4h": 14400,
-        "6h": 21600,
         "1d": 86400,
     }
 
-    candle_seconds = seconds[resolution]
+    candle_seconds = seconds.get(resolution, 300)
 
-    start = now - (limit * candle_seconds)
+    now = int(time.time())
+
+    # Last completed candle
+    end = now - (now % candle_seconds)
+
+    start = end - (limit * candle_seconds)
 
     url = f"{BASE_URL}/history/candles"
 
     params = {
-        "resolution": resolution,
         "symbol": symbol,
+        "resolution": resolution,
         "start": start,
-        "end": now
+        "end": end,
     }
 
-    r = SESSION.get(
-        url,
-        params=params,
-        timeout=20
-    )
+    try:
+        r = requests.get(url, params=params, timeout=15)
+        data = r.json()
 
-    r.raise_for_status()
+        if not data.get("success"):
+            return []
 
-    data = r.json()
+        result = []
 
-    if not data["success"]:
-        raise Exception("Delta API Error")
+        for c in data["result"]:
+            result.append({
+                "time": c["time"],
+                "open": float(c["open"]),
+                "high": float(c["high"]),
+                "low": float(c["low"]),
+                "close": float(c["close"]),
+                "volume": float(c["volume"])
+            })
 
-    return data["result"]
+        result.sort(key=lambda x: x["time"])
+
+        return result
+
+    except Exception as e:
+        print("Delta Error:", e)
+        return []
 
 
-def get_btc():
+def get_latest_price(symbol="BTCUSD"):
 
-    return get_ticker("BTCUSD")
+    candles = get_candles(symbol, "1m", 2)
 
+    if len(candles) == 0:
+        return None
 
-def get_eth():
-
-    return get_ticker("ETHUSD")
+    return candles[-1]["close"]
