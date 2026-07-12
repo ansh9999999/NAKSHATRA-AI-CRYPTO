@@ -71,3 +71,5 @@ scheduler.add_job(
 scheduler.start()
 
 print("🚀 NAKSHATRA Scheduler Started")
+
+market_scan()
