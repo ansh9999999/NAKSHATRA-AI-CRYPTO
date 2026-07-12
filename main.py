@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 import os
 import requests
-
+import scheduler
 from analysis.indicators import indicator_summary
 from analysis.signal import generate_signal
 from history import get_history
