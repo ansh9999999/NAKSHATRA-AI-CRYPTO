@@ -25,36 +25,40 @@ def market_scan():
 
         current_signal = signal["signal"]
 
-        # WAIT signal par alert mat bhejo
+        # WAIT par alert nahi
         if current_signal == "WAIT":
             return
 
-        # Same signal repeat mat bhejo
+        # Same signal repeat nahi
         if current_signal == last_signal:
             return
 
         last_signal = current_signal
 
-        message = f"""🚀 NAKSHATRA AI CRYPTO
+        emoji = "🟢" if current_signal == "BIG BUY" else "🔴"
+
+        message = f"""
+🚨 NAKSHATRA BIG MOVE ALERT 🚨
+
+{emoji} {current_signal}
 
 📊 Symbol : BTCUSD
-💰 Price : {signal['price']}
+💰 Entry : {signal['price']}
 
 📈 Trend : {signal['trend']}
-🎯 Signal : {signal['signal']}
-✅ Confidence : {signal['confidence']}%
+🔥 Confidence : {signal['confidence']}%
 
 📉 RSI : {signal['rsi']}
 📊 EMA9 : {signal['ema9']}
 📊 EMA21 : {signal['ema21']}
 
-Reasons:
+Reasons
 - {'\n- '.join(signal['reasons'])}
 """
 
         send_message(message)
 
-        print("✅ Telegram Alert Sent")
+        print("✅ BIG MOVE ALERT SENT")
 
     except Exception as e:
 
@@ -72,4 +76,5 @@ scheduler.start()
 
 print("🚀 NAKSHATRA Scheduler Started")
 
+# Server start hote hi ek scan
 market_scan()
