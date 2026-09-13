@@ -1,17 +1,29 @@
-let symbol='BTCUSD'; let busy=false;
+let symbol='BTCUSD',busy=false;
 const $=id=>document.getElementById(id);
-function fmt(v,d=2){return v==null||Number.isNaN(Number(v))?'—':Number(v).toLocaleString(undefined,{maximumFractionDigits:d});}
-function setDecision(v){$('decision').textContent=v||'WAIT'; $('decision').className=(v||'WAIT').toLowerCase();}
+const esc=v=>String(v??'—').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
+const fmt=(v,d=2)=>v==null||v===''||Number.isNaN(Number(v))?'—':Number(v).toLocaleString(undefined,{maximumFractionDigits:d});
+function set(id,v){if($(id))$(id).textContent=v??'—'}
+function tone(v){return String(v||'').toUpperCase()}
 function render(a){
- const t=a.ticker||{}; const x=a.analysis||{}; $('price').textContent=fmt(t.ltp); $('change').textContent=t.change_24h==null?'':`24h ${fmt(t.change_24h)}%`;
- setDecision(x.recommendation); $('confidence').textContent=`Confidence ${fmt(x.confidence,1)}%`; $('trend').textContent=x.trend||'—'; $('techScore').textContent=fmt(x.technical_score,0); $('optScore').textContent=fmt(x.option_score,0); $('overallScore').textContent=fmt(x.overall_score,0);
- const it=x.intraday_trend||{}; $('overall').textContent=it.overall||'—'; const by={}; (it.timeframes||[]).forEach(z=>by[z.timeframe]=z); ['5m','15m','1h','1d'].forEach(k=>$(k==='1h'?'tf1h':'tf'+k.replace('m','')).textContent=by[k]?.trend||'—');
- $('mtf').innerHTML=(it.timeframes||[]).map(z=>`<div class="row"><b>${z.timeframe}</b><span>${z.trend}</span><em>score ${z.score}</em></div>`).join('');
+ const x=a.analysis||{},t=a.ticker||{},o=x.option_chain||{},it=x.intraday_trend||{},ast=x.astrology||{},num=x.numerology||{},ag=x.agreement_detail||{};
+ set('marketSymbol',symbol==='BTCUSD'?'BTC/USD':'ETH/USD');set('price',fmt(t.ltp));set('change',t.change_24h==null?'':`24h ${fmt(t.change_24h)}%`);set('decision',x.recommendation||'WAIT');set('bigDecision',x.recommendation||'WAIT');set('confidence',`Confidence ${fmt(x.confidence,1)}%`);set('decisionNote',`Overall score ${fmt(x.overall_score,0)} • Technical ${fmt(x.technical_score,0)} • Option ${fmt(x.option_score,0)}`);set('trend',x.trend||'—');
+ const by={};(it.timeframes||[]).forEach(z=>by[z.timeframe]=z);set('tf5',by['5m']?.trend);set('tf15',by['15m']?.trend);set('tf1h',by['1h']?.trend);set('tf1d',by['1d']?.trend);set('overall',it.overall);set('marketScore',`Score ${it.score??'—'}`);
+ $('mtf').innerHTML=(it.timeframes||[]).map(z=>`<div class="row"><b>${esc(z.timeframe)}</b><span>${esc(z.trend)}</span><em>Score ${esc(z.score)}</em></div>`).join('')||'<div class="muted">No timeframe data</div>';
+ $('sideMtf').innerHTML=$('mtf').innerHTML;
+ set('marketTrend',it.overall||x.trend||'—');
+ const tech=x.technical||{};set('moduleTechnical',tech.signal||'—');set('moduleTechnicalScore',`Score ${tech.score??tech.confidence??'—'}`);set('moduleAstrology',ast.bias||'—');set('moduleAstrologyScore',`Score ${ast.score??'—'}`);set('moduleNumerology',num.bias||'—');set('moduleNumerologyScore',`Score ${num.score??'—'}`);set('moduleOption',o.signal||'—');set('moduleOptionScore',`Score ${o.score??'—'}`);
  $('metrics').innerHTML=[['EMA9',x.ema9],['EMA21',x.ema21],['EMA50',x.ema50],['EMA200',x.ema200],['RSI',x.rsi],['MACD',x.macd],['ATR',x.atr]].map(q=>`<div><small>${q[0]}</small><b>${fmt(q[1],4)}</b></div>`).join('');
- $('reasons').innerHTML=(x.reasons||[]).map(r=>`<span>• ${r}</span>`).join('');
- const o=x.option_chain||{}; $('expiry').textContent=`Expiry ${o.expiry||'—'}`; $('optionMetrics').innerHTML=[['PCR OI',o.pcr_oi],['PCR VOL',o.pcr_volume],['ATM',o.atm],['Support',o.support],['Resistance',o.resistance],['Max Pain',o.max_pain],['CE OI',o.call_oi],['PE OI',o.put_oi]].map(q=>`<div><small>${q[0]}</small><b>${fmt(q[1],3)}</b></div>`).join('');
- $('chain').innerHTML=(o.atm_chain||[]).map(r=>`<tr class="${r.atm?'atm':''}"><td>${fmt(r.strike)}</td><td>${fmt(r.call_ltp)}</td><td>${fmt(r.call_oi,0)}</td><td>${fmt(r.put_oi,0)}</td><td>${fmt(r.put_ltp)}</td></tr>`).join('') || '<tr><td colspan="5">Option chain unavailable</td></tr>';
- $('status').textContent='● LIVE';
+ const techReasons=(x.reasons||[]).slice(0,6);$('techTags').innerHTML=techReasons.map(r=>`<span>• ${esc(r)}</span>`).join('');
+ $('astroRows').innerHTML=[['Rashi Trend',ast.rashi_trend||ast.bias],['Nakshatra Influence',ast.nakshatra_influence||ast.nakshatra],['Tithi Impact',ast.tithi_impact||ast.tithi],['Moon Phase',ast.moon_phase],['Yoga',ast.yoga],['Karana',ast.karana],['Planetary Alignment',ast.planetary_alignment],['Overall Astrology Score',ast.score]].map(q=>`<div><span>${esc(q[0])}</span><b>${esc(q[1])}</b></div>`).join('');
+ $('numRows').innerHTML=[['Life Path Number',num.life_path],['Expression Number',num.expression],['Day Vibration',num.day_vibration],['Market Number',num.market_number],['Overall Numerology Score',num.score],['Bias',num.bias]].map(q=>`<div><span>${esc(q[0])}</span><b>${esc(q[1])}</b></div>`).join('');
+ $('optionSideRows').innerHTML=[['Option Chain Trend',o.signal],['PCR (OI)',o.pcr_oi],['PCR (Volume)',o.pcr_volume],['ATM Strike',o.atm],['Max Pain',o.max_pain],['Total CE OI',o.call_oi],['Total PE OI',o.put_oi],['Call/Put Resistance',o.resistance],['Call/Put Support',o.support],['Option Chain Score',o.score]].map(q=>`<div><span>${esc(q[0])}</span><b>${esc(fmt(q[1],3))}</b></div>`).join('');
+ $('agreement').innerHTML=[['Technical',ag.technical||tech.signal],['Astrology',ag.astrology||ast.bias],['Numerology',ag.numerology||num.bias],['Option Chain',ag.option_chain||o.signal],['Final Agreement',ag.final||x.agreement]].map(q=>`<div><span>${esc(q[0])}</span><b>${esc(q[1])}</b></div>`).join('');
+ $('reasons').innerHTML=(x.reasons||[]).slice(0,12).map(r=>`<li>${esc(r)}</li>`).join('')||'<li>No reasons returned</li>';
+ set('expiry',`Expiry ${o.expiry||'—'}`);set('optionNote',o.reason||'Live Delta option-chain data');
+ $('optionMetrics').innerHTML=[['PCR OI',o.pcr_oi],['PCR VOL',o.pcr_volume],['ATM',o.atm],['Support',o.support],['Resistance',o.resistance],['Max Pain',o.max_pain],['CE OI',o.call_oi],['PE OI',o.put_oi]].map(q=>`<div><small>${q[0]}</small><b>${fmt(q[1],3)}</b></div>`).join('');
+ $('chain').innerHTML=(o.atm_chain||[]).map(r=>`<tr class="${r.atm?'atm':''}"><td>${fmt(r.strike)}</td><td>${fmt(r.call_ltp)}</td><td>${fmt(r.call_oi,0)}</td><td>${fmt(r.put_oi,0)}</td><td>${fmt(r.put_ltp)}</td></tr>`).join('')||'<tr><td colspan="5">Option chain unavailable</td></tr>';
+ set('status','● LIVE');set('updateStatus',`Updated ${new Date().toLocaleTimeString()}`);
 }
-async function load(){if(busy)return;busy=true;try{const r=await fetch(`/api/live?symbol=${symbol}&_=${Date.now()}`);const d=await r.json();if(d.status==='OK')render(d);else $('status').textContent='● ERROR';}catch(e){$('status').textContent='● OFFLINE';}finally{busy=false;}}
-document.querySelectorAll('.symbol').forEach(b=>b.onclick=()=>{document.querySelectorAll('.symbol').forEach(x=>x.classList.remove('active'));b.classList.add('active');symbol=b.dataset.symbol;load();});load();setInterval(load,15000);
+async function load(){if(busy)return;busy=true;set('updateStatus','Updating...');try{const r=await fetch(`/api/live?symbol=${symbol}&_=${Date.now()}`,{cache:'no-store'});const d=await r.json();if(d.status==='OK')render(d);else{set('status','● ERROR');set('updateStatus',d.error||'Data unavailable')}}catch(e){set('status','● OFFLINE');set('updateStatus',e.message)}finally{busy=false}}
+async function scanner(){try{const r=await fetch('/api/scanner?_='+Date.now(),{cache:'no-store'});const d=await r.json();const arr=d.markets||[];$('scanner').innerHTML=arr.map(x=>`<div class="scanner-row"><b>${esc(x.symbol)}</b><span>${esc(x.recommendation||x.signal||'WAIT')}</span><small>${esc(x.confidence??'—')}%</small></div>`).join('')||'No scanner data'}catch(e){$('scanner').textContent='Scanner unavailable'}}
+document.querySelectorAll('.symbol').forEach(b=>b.onclick=()=>{document.querySelectorAll('.symbol').forEach(x=>x.classList.remove('active'));b.classList.add('active');symbol=b.dataset.symbol;load()});$('refreshBtn')?.addEventListener('click',()=>{load();scanner()});load();scanner();setInterval(()=>{load();scanner()},10000);
