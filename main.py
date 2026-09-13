@@ -1,195 +1,66 @@
-from fastapi import FastAPI
-import os
-import requests
-import scheduler
+from fastapi import FastAPI, Query
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi import Request
+
+from delta import get_ticker
+from history import get_history
 from analysis.indicators import indicator_summary
 from analysis.signal import generate_signal
-from history import get_history
 
-app = FastAPI(
-    title="NAKSHATRA AI CRYPTO",
-    description="AI Crypto Analysis API",
-    version="2.1"
-)
+app=FastAPI(title="NAKSHATRA AI CRYPTO",version="3.0")
+app.mount("/static",StaticFiles(directory="static"),name="static")
+templates=Jinja2Templates(directory="templates")
+SYMBOLS=("BTCUSD","ETHUSD")
 
-API_KEY = os.getenv("DELTA_API_KEY")
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-BASE_URL = "https://api.india.delta.exchange/v2"
-
-
-def send_telegram(message):
-
-    if not BOT_TOKEN or not CHAT_ID:
-        return {
-            "success": False,
-            "error": "Telegram variables missing"
-        }
-
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-
-    data = {
-        "chat_id": CHAT_ID,
-        "text": message
-    }
-
-    r = requests.post(url, data=data)
-
-    return r.json()
-
-
-@app.get("/")
-def home():
-    return {
-        "project": "NAKSHATRA AI CRYPTO",
-        "status": "Running",
-        "api_key_found": API_KEY is not None,
-        "telegram": BOT_TOKEN is not None
-    }
-
+@app.get("/",response_class=HTMLResponse)
+def home(request:Request): return templates.TemplateResponse("dashboard.html",{"request":request})
 
 @app.get("/health")
-def health():
-    return {
-        "status": "healthy"
-    }
+def health(): return {"status":"healthy","project":"NAKSHATRA AI CRYPTO","version":"3.0"}
 
+@app.get("/api/live")
+def live(symbol: str=Query("BTCUSD")):
+    s=symbol.upper()
+    if s not in SYMBOLS: return {"status":"ERROR","error":"Unsupported symbol"}
+    try:
+        ticker=get_ticker(s)
+        analysis=generate_signal(get_history(s,"5m",250),s)
+        return {"status":"OK","symbol":s,"ticker":ticker,"analysis":analysis}
+    except Exception as e: return {"status":"ERROR","symbol":s,"error":str(e)}
 
+@app.get("/api/analysis")
+def analysis(symbol: str=Query("BTCUSD")):
+    s=symbol.upper(); df=get_history(s,"5m",250)
+    if df.empty: return {"status":"ERROR","error":"No market data"}
+    return {"status":"OK","symbol":s,"indicators":indicator_summary(df),"analysis":generate_signal(df,s)}
+
+@app.get("/api/history")
+def history(symbol: str=Query("BTCUSD"), resolution: str=Query("5m"), limit:int=Query(250,ge=50,le=500)):
+    df=get_history(symbol.upper(),resolution,limit)
+    return {"status":"OK","symbol":symbol.upper(),"resolution":resolution,"rows":df.to_dict(orient="records")}
+
+@app.get("/api/option-chain")
+def option_chain(symbol: str=Query("BTCUSD")):
+    from delta import get_option_chain
+    return get_option_chain(symbol.upper())
+
+@app.get("/api/scanner")
+def scanner():
+    out=[]
+    for s in SYMBOLS:
+        try: out.append(generate_signal(get_history(s,"5m",250),s))
+        except Exception as e: out.append({"status":"ERROR","symbol":s,"error":str(e)})
+    return {"status":"OK","markets":out}
+
+# Backward-compatible endpoints
 @app.get("/btc")
-def btc():
-
-    try:
-
-        r = requests.get(f"{BASE_URL}/tickers/BTCUSD")
-
-        data = r.json()["result"]
-
-        return {
-            "success": True,
-            "result": data
-        }
-
-    except Exception as e:
-
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-
+def btc(): return get_ticker("BTCUSD")
+@app.get("/eth")
+def eth(): return get_ticker("ETHUSD")
 @app.get("/signal")
-def signal():
-
-    try:
-
-        df = get_dataframe()
-
-        return generate_signal(df)
-
-    except Exception as e:
-
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-
-def get_dataframe():
-    return get_history(
-        symbol="BTCUSD",
-        resolution="5m",
-        limit=200
-    )
-
-
+def signal(): return generate_signal(get_history("BTCUSD","5m",250),"BTCUSD")
 @app.get("/analysis")
-def analysis():
-
-    try:
-
-        df = get_dataframe()
-
-        indicators = indicator_summary(df)
-
-        signal = generate_signal(df)
-
-        return {
-
-            "success": True,
-            "indicators": indicators,
-            "signal": signal
-
-        }
-
-    except Exception as e:
-
-        return {
-
-            "success": False,
-            "error": str(e)
-
-        }
-
-
-@app.get("/telegram")
-def telegram():
-
-    try:
-
-        df = get_dataframe()
-
-        signal = generate_signal(df)
-
-        message = f"""
-🚀 NAKSHATRA AI CRYPTO
-
-📊 Symbol : BTCUSD
-💰 Price : {signal['price']}
-
-📈 Trend : {signal['trend']}
-🎯 Signal : {signal['signal']}
-✅ Confidence : {signal['confidence']}%
-
-RSI : {signal['rsi']}
-EMA9 : {signal['ema9']}
-EMA21 : {signal['ema21']}
-
-Reasons:
-- {'\n- '.join(signal['reasons'])}
-"""
-
-        result = send_telegram(message)
-
-        return {
-            "success": True,
-            "telegram": result
-        }
-
-    except Exception as e:
-
-        return {
-            "success": False,
-            "error": str(e)
-        }
-@app.get("/debug")
-def debug():
-
-    try:
-
-        df = get_dataframe()
-
-        return {
-            "success": True,
-            "rows": len(df),
-            "columns": list(df.columns),
-            "head": df.head(3).to_dict(orient="records"),
-            "tail": df.tail(3).to_dict(orient="records")
-        }
-
-    except Exception as e:
-
-        return {
-            "success": False,
-            "error": str(e)
-        }
+def legacy_analysis():
+    df=get_history("BTCUSD","5m",250); return {"success":True,"indicators":indicator_summary(df),"signal":generate_signal(df,"BTCUSD")}
