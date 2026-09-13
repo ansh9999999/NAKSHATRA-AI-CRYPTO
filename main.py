@@ -15,7 +15,12 @@ templates=Jinja2Templates(directory="templates")
 SYMBOLS=("BTCUSD","ETHUSD")
 
 @app.get("/",response_class=HTMLResponse)
-def home(request:Request): return templates.TemplateResponse("dashboard.html",{"request":request})
+def home(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard.html",
+        context={}
+    )
 
 @app.get("/health")
 def health(): return {"status":"healthy","project":"NAKSHATRA AI CRYPTO","version":"3.0"}
