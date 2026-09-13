@@ -1,11 +1,66 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NAKSHATRA AI CRYPTO</title><link rel="stylesheet" href="/static/style.css"></head><body>
-<header><div><h1>✦ NAKSHATRA AI CRYPTO</h1><p>BTC / ETH • Delta Exchange • Intraday AI</p></div><span id="status">● CONNECTING</span></header>
-<nav><button class="symbol active" data-symbol="BTCUSD">₿ BTCUSD</button><button class="symbol" data-symbol="ETHUSD">Ξ ETHUSD</button></nav>
-<main>
-<section class="hero"><div><small>LIVE PRICE</small><div id="price">—</div><span id="change">—</span></div><div class="decision"><small>DECISION</small><strong id="decision">WAIT</strong><span id="confidence">Confidence —</span></div></section>
-<section class="grid four"><article><small>5M</small><b id="tf5">—</b></article><article><small>15M</small><b id="tf15">—</b></article><article><small>1H</small><b id="tf1h">—</b></article><article><small>1D</small><b id="tf1d">—</b></article></section>
-<section class="card"><div class="head"><h2>⚡ Intraday Trend</h2><b id="overall">—</b></div><div id="mtf" class="rows">Loading...</div></section>
-<section class="grid three"><article><small>TECHNICAL SCORE</small><b id="techScore">—</b></article><article><small>OPTION SCORE</small><b id="optScore">—</b></article><article><small>OVERALL SCORE</small><b id="overallScore">—</b></article></section>
-<section class="card"><div class="head"><h2>📊 Technical Analysis</h2><span id="trend">—</span></div><div class="metrics" id="metrics"></div><div class="reasons" id="reasons"></div></section>
-<section class="card"><div class="head"><h2>🧮 Crypto Option Chain</h2><span id="expiry">Expiry —</span></div><div class="metrics" id="optionMetrics"></div><div class="tablewrap"><table><thead><tr><th>Strike</th><th>CE LTP</th><th>CE OI</th><th>PE OI</th><th>PE LTP</th></tr></thead><tbody id="chain"></tbody></table></div></section>
-</main><footer>NAKSHATRA AI CRYPTO v3.0 • Market data from Delta Exchange</footer><script src="/static/app.js?v=3.0"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NAKSHATRA AI v4.0</title>
+<link rel="stylesheet" href="/static/style.css?v=4.1.0">
+</head>
+<body>
+<div class="container">
+<header class="topbar">
+  <div class="brand">
+    <h1>🚀 NAKSHATRA AI v4.0</h1>
+    <div class="subline"><span>👤 Crypto AI</span><span id="schedulerStatus">🟢 Live Engine</span><span id="updateStatus">Updating...</span></div>
+  </div>
+  <div class="top-actions"><span id="status">● CONNECTING</span><button id="refreshBtn">↻ Refresh</button></div>
+</header>
+<nav class="tabs"><button class="symbol active" data-symbol="BTCUSD">₿ BTC/USD</button><button class="symbol" data-symbol="ETHUSD">Ξ ETH/USD</button><span class="tab-static">DELTA EXCHANGE</span><span class="tab-static">INTRADAY AI</span></nav>
+
+<main class="dashboard-grid">
+  <div class="main-col">
+    <section class="card market">
+      <div class="section-head"><h2>🔥 Live Market</h2><span id="marketSymbol">BTC/USD</span></div>
+      <div class="market-main"><div><small>LIVE PRICE</small><div id="price" class="price">—</div><div id="change" class="change">—</div></div><div class="market-decision"><small>DECISION</small><strong id="decision">WAIT</strong><span id="confidence">Confidence —</span></div></div>
+      <div class="tf-strip"><div><small>5M</small><b id="tf5">—</b></div><div><small>15M</small><b id="tf15">—</b></div><div><small>1H</small><b id="tf1h">—</b></div><div><small>1D</small><b id="tf1d">—</b></div></div>
+    </section>
+
+    <section class="card decision-card"><h2>🧠 NAKSHATRA Decision</h2><div id="bigDecision">WAIT</div><p id="decisionNote">Full analysis below</p></section>
+
+    <section class="card"><h2>📊 Analysis Modules</h2><div class="module-list">
+      <div><span>📈 Technical</span><b id="moduleTechnical">—</b><small id="moduleTechnicalScore">Score —</small></div>
+      <div><span>🌙 Astrology</span><b id="moduleAstrology">—</b><small id="moduleAstrologyScore">Score —</small></div>
+      <div><span>🔢 Numerology</span><b id="moduleNumerology">—</b><small id="moduleNumerologyScore">Score —</small></div>
+      <div><span>⛓️ Option Chain</span><b id="moduleOption">—</b><small id="moduleOptionScore">Score —</small></div>
+    </div></section>
+
+    <section class="card"><div class="section-head"><h2>⚡ Intraday Trend</h2><b id="overall">—</b></div><div id="mtf" class="rows">Loading...</div></section>
+
+    <section class="card"><div class="section-head"><h2>📈 Market Trend</h2><span id="marketScore">Score —</span></div><div id="marketTrend" class="trend-box">—</div></section>
+
+    <section class="card"><div class="section-head"><h2>📊 Technical Analysis</h2><b id="trend">—</b></div><div class="metrics" id="metrics"></div><div class="reasons" id="techTags"></div></section>
+
+    <section class="card option-card"><div class="section-head"><h2>⛓️ Crypto Option Chain Analysis</h2><span id="expiry">Expiry —</span></div>
+      <div class="metrics option-metrics" id="optionMetrics"></div>
+      <div class="tablewrap"><table><thead><tr><th>Strike</th><th>CE LTP</th><th>CE OI</th><th>PE OI</th><th>PE LTP</th></tr></thead><tbody id="chain"></tbody></table></div>
+      <p id="optionNote" class="muted">Loading option-chain data...</p>
+    </section>
+  </div>
+
+  <aside class="side-col">
+    <section class="card"><h2>🌙 Astrology Analysis</h2><div class="analysis-rows" id="astroRows"></div></section>
+    <section class="card"><h2>🔢 Numerology Analysis</h2><div class="analysis-rows" id="numRows"></div></section>
+    <section class="card"><h2>⛓️ Full Option Chain Analysis</h2><div class="analysis-rows" id="optionSideRows"></div></section>
+    <section class="card"><h2>📊 Multi-Timeframe Trend</h2><div id="sideMtf" class="rows"></div></section>
+    <section class="card"><h2>🤝 Agreement</h2><div class="agreement" id="agreement"></div></section>
+    <section class="card"><h2>📝 Reasons</h2><ul id="reasons"><li>Loading...</li></ul></section>
+    <section class="card chart-card"><div class="section-head"><h2>📉 Equity Curve</h2><span id="equityValue">No data</span></div><canvas id="equityChart"></canvas></section>
+    <section class="card"><h2>🔎 Live Scanner</h2><div id="scanner">Loading...</div></section>
+    <section class="card"><h2>📋 Recent Trades</h2><div class="tablewrap"><table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>P&L</th><th>Status</th></tr></thead><tbody id="trades"><tr><td colspan="5">No trade API connected</td></tr></tbody></table></div></section>
+  </aside>
+</main>
+<footer><span>NAKSHATRA AI v4.0 • Market data from Delta Exchange</span><span>Auto refresh: 10 seconds • © 2026 Project Nakshatra</span></footer>
+</div>
+<script src="/static/app.js?v=4.1.0"></script>
+</body>
+</html>
