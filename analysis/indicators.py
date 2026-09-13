@@ -1,109 +1,52 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
-def ema(close, period):
-    return close.ewm(span=period, adjust=False).mean()
-
-
-def sma(close, period):
-    return close.rolling(period).mean()
+def ema(s, period): return s.ewm(span=period, adjust=False).mean()
+def sma(s, period): return s.rolling(period).mean()
 
 
 def rsi(close, period=14):
-
-    delta = close.diff()
-
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-
-    avg_gain = gain.rolling(period).mean()
-    avg_loss = loss.rolling(period).mean()
-
-    rs = avg_gain / avg_loss
-
-    value = 100 - (100 / (1 + rs))
-
-    value = value.fillna(50)
-
-    return value
+    d = close.diff()
+    gain = d.clip(lower=0)
+    loss = -d.clip(upper=0)
+    ag = gain.ewm(alpha=1/period, adjust=False, min_periods=period).mean()
+    al = loss.ewm(alpha=1/period, adjust=False, min_periods=period).mean()
+    rs = ag / al.replace(0, np.nan)
+    out = 100 - (100 / (1 + rs))
+    return out.fillna(50)
 
 
 def macd(close):
-
-    ema12 = ema(close, 12)
-    ema26 = ema(close, 26)
-
-    macd_line = ema12 - ema26
-    signal_line = ema(macd_line, 9)
-    histogram = macd_line - signal_line
-
-    return macd_line, signal_line, histogram
+    fast = ema(close, 12); slow = ema(close, 26)
+    line = fast - slow; sig = ema(line, 9)
+    return line, sig, line - sig
 
 
 def atr(high, low, close, period=14):
-
-    high_low = high - low
-    high_close = abs(high - close.shift())
-    low_close = abs(low - close.shift())
-
-    tr = pd.concat(
-        [high_low, high_close, low_close],
-        axis=1
-    ).max(axis=1)
-
-    return tr.rolling(period).mean().fillna(0)
+    tr = pd.concat([high-low, (high-close.shift()).abs(), (low-close.shift()).abs()], axis=1).max(axis=1)
+    return tr.ewm(alpha=1/period, adjust=False, min_periods=period).mean().fillna(0)
 
 
 def trend(close):
-
-    ema9 = ema(close, 9).iloc[-1]
-    ema21 = ema(close, 21).iloc[-1]
-    ema50 = ema(close, 50).iloc[-1]
-
-    if ema9 > ema21 > ema50:
-        return "STRONG BULLISH"
-
-    elif ema9 < ema21 < ema50:
-        return "STRONG BEARISH"
-
-    elif ema9 > ema21:
-        return "BULLISH"
-
-    elif ema9 < ema21:
-        return "BEARISH"
-
+    if len(close) < 50: return "DATA INSUFFICIENT"
+    e9, e21, e50 = ema(close,9).iloc[-1], ema(close,21).iloc[-1], ema(close,50).iloc[-1]
+    if e9 > e21 > e50: return "STRONG BULLISH"
+    if e9 < e21 < e50: return "STRONG BEARISH"
+    if e9 > e21: return "BULLISH"
+    if e9 < e21: return "BEARISH"
     return "SIDEWAYS"
 
 
 def indicator_summary(df):
-
-    close = df["close"]
-    high = df["high"]
-    low = df["low"]
-
-    macd_line, signal_line, hist = macd(close)
-
+    if df.empty: return {"status":"NO_DATA"}
+    c,h,l = df.close,df.high,df.low
+    ml,ms,mh = macd(c)
     return {
-
-        "price": round(float(close.iloc[-1]), 2),
-
-        "ema9": round(float(ema(close, 9).fillna(0).iloc[-1]), 2),
-
-        "ema21": round(float(ema(close, 21).fillna(0).iloc[-1]), 2),
-
-        "ema50": round(float(ema(close, 50).fillna(0).iloc[-1]), 2),
-
-        "rsi": round(float(rsi(close).iloc[-1]), 2),
-
-        "macd": round(float(macd_line.fillna(0).iloc[-1]), 4),
-
-        "macd_signal": round(float(signal_line.fillna(0).iloc[-1]), 4),
-
-        "histogram": round(float(hist.fillna(0).iloc[-1]), 4),
-
-        "atr": round(float(atr(high, low, close).iloc[-1]), 2),
-
-        "trend": trend(close)
-
+        "price": round(float(c.iloc[-1]),2), "ema9": round(float(ema(c,9).iloc[-1]),2),
+        "ema21": round(float(ema(c,21).iloc[-1]),2), "ema50": round(float(ema(c,50).iloc[-1]),2),
+        "ema200": round(float(ema(c,200).iloc[-1]),2), "rsi": round(float(rsi(c).iloc[-1]),2),
+        "macd": round(float(ml.iloc[-1]),5), "macd_signal": round(float(ms.iloc[-1]),5),
+        "histogram": round(float(mh.iloc[-1]),5), "atr": round(float(atr(h,l,c).iloc[-1]),2),
+        "trend": trend(c), "rows": len(df)
     }
