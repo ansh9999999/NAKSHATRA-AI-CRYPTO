@@ -641,8 +641,22 @@ def get_option_chain(symbol="BTCUSD", expiry_date=None):
                 "vega": _float((row.get("greeks") or {}).get("vega")),
             })
 
-        return out
+        # The signal engine expects a dashboard-friendly mapping, not a raw list.
+        return {
+            "status": "OK",
+            "symbol": symbol,
+            "underlying": underlying,
+            "expiry": expiry_date,
+            "rows": out,
+        }
 
     except Exception as exc:
         print(f"Delta option chain error [{symbol}]: {exc}")
-        return []
+        return {
+            "status": "ERROR",
+            "symbol": symbol,
+            "underlying": underlying,
+            "expiry": expiry_date,
+            "rows": [],
+            "reason": str(exc),
+        }
