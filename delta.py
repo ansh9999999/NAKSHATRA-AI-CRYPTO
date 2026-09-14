@@ -1,3 +1,4 @@
+import re
 """
 NAKSHATRA AI v4.0
 Delta Exchange India - Market Data Helper
@@ -540,3 +541,108 @@ if __name__ == "__main__":
         )
 
     print("=" * 60)
+
+
+# ==========================================================
+# DELTA OPTION CHAIN
+# ==========================================================
+
+def get_option_chain(symbol="BTCUSD", expiry_date=None):
+    """
+    Fetch the live option chain from Delta Exchange India.
+
+    Delta's public API exposes the chain through /v2/tickers with:
+      contract_types=call_options,put_options
+      underlying_asset_symbols=BTC/ETH/...
+      expiry_date=DD-MM-YYYY
+
+    If expiry_date is omitted, the first live/future expiry returned by
+    Delta's product list is selected.
+    """
+    symbol = str(symbol).upper().strip()
+
+    # BTCUSD -> BTC, ETHUSD -> ETH, etc.
+    underlying = symbol.replace("USD", "").replace("_INR", "").strip()
+    if not underlying:
+        return []
+
+    try:
+        if not expiry_date:
+            # Get live option products and choose the earliest expiry.
+            r = session.get(
+                f"{BASE_URL}/products",
+                params={
+                    "contract_types": "call_options,put_options",
+                    "states": "live",
+                    "page_size": 100,
+                },
+                timeout=TIMEOUT,
+            )
+            r.raise_for_status()
+            products = (r.json() or {}).get("result", []) or []
+
+            candidates = []
+            for p in products:
+                if str(p.get("underlying_asset_symbol", "")).upper() != underlying:
+                    continue
+                exp = p.get("settlement_time") or p.get("expiry") or p.get("expiry_date")
+                if exp:
+                    candidates.append((str(exp), p))
+
+            if candidates:
+                candidates.sort(key=lambda x: x[0])
+                exp_raw = candidates[0][0]
+
+                # Normalise common ISO/date forms to DD-MM-YYYY.
+                m = re.search(r"(\d{4})-(\d{2})-(\d{2})", exp_raw)
+                if m:
+                    expiry_date = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+
+        params = {
+            "contract_types": "call_options,put_options",
+            "underlying_asset_symbols": underlying,
+        }
+        if expiry_date:
+            params["expiry_date"] = str(expiry_date)
+
+        r = session.get(
+            f"{BASE_URL}/tickers",
+            params=params,
+            timeout=TIMEOUT,
+        )
+        r.raise_for_status()
+        payload = r.json() or {}
+        rows = payload.get("result", []) or []
+
+        # Keep the response small and dashboard-friendly.
+        out = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            out.append({
+                "symbol": row.get("symbol"),
+                "contract_type": row.get("contract_type"),
+                "strike_price": _float(row.get("strike_price")),
+                "expiry": row.get("expiry") or row.get("expiry_date") or expiry_date,
+                "close": _float(row.get("close")),
+                "mark_price": _float(row.get("mark_price")),
+                "volume": _float(row.get("volume")),
+                "oi": _float(row.get("oi")),
+                "oi_value": _float(row.get("oi_value")),
+                "spot_price": _float(row.get("spot_price")),
+                "iv": _float(
+                    (row.get("quotes") or {}).get("ask_iv")
+                    or row.get("mark_vol")
+                    or 0
+                ),
+                "delta": _float((row.get("greeks") or {}).get("delta")),
+                "gamma": _float((row.get("greeks") or {}).get("gamma")),
+                "theta": _float((row.get("greeks") or {}).get("theta")),
+                "vega": _float((row.get("greeks") or {}).get("vega")),
+            })
+
+        return out
+
+    except Exception as exc:
+        print(f"Delta option chain error [{symbol}]: {exc}")
+        return []
