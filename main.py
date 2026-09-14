@@ -24,7 +24,7 @@ from scheduler import start_scheduler
 from logger import logger
 from database.database import initialize_database
 from database.models import get_all_trades, get_open_trades
-from history import get_multi_timeframe_history
+from history import get_multi_timeframe_history, get_history
 from analysis.signal import generate_signal
 from scanner import market_scan
 from delta import get_ticker, BASE_URL, session
@@ -339,6 +339,29 @@ def api_live(symbol: str = "BTCUSD", force: bool = False):
         "analysis": analysis,
         "server_time": time.time(),
     })
+
+
+@app.get("/api/chart")
+def api_chart(symbol: str = "BTCUSD", resolution: str = "15m", limit: int = 80):
+    try:
+        limit = max(20, min(int(limit), 200))
+        df = get_history(symbol.upper().strip(), resolution, limit)
+        if df is None or df.empty:
+            return {"status": "NO_DATA", "symbol": symbol, "rows": []}
+        rows = []
+        for _, r in df.tail(limit).iterrows():
+            rows.append({
+                "time": r.get("time"),
+                "open": float(r.get("open", 0)),
+                "high": float(r.get("high", 0)),
+                "low": float(r.get("low", 0)),
+                "close": float(r.get("close", 0)),
+                "volume": float(r.get("volume", 0)),
+            })
+        return {"status": "OK", "symbol": symbol.upper(), "resolution": resolution, "rows": rows}
+    except Exception as exc:
+        logger.warning("Chart failed %s: %s", symbol, exc)
+        return {"status": "ERROR", "symbol": symbol, "rows": [], "message": str(exc)}
 
 
 @app.get("/api/debug-data")
