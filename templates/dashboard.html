@@ -1,49 +1,94 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NAKSHATRA AI</title><link rel="stylesheet" href="/static/style.css?v=5.0.0">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050a18">
+  <title>NAKSHATRA AI — Crypto Intelligence</title>
+  <link rel="stylesheet" href="/static/style.css?v=6.0.0">
 </head>
-<body><div class="container">
-<header class="topbar">
-  <div><h1>✦ NAKSHATRA AI</h1><div class="subline"><span>Delta Exchange India</span><span id="status">● CONNECTING</span><span id="updateStatus">Updating...</span></div></div>
-  <button id="refreshBtn" class="refresh">↻ Refresh</button>
-</header>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">✦</div><div><h1>NAKSHATRA AI</h1><p>AI • ASTRO • NUMEROLOGY • TECHNICAL • SENTIMENT</p></div></div>
+    <div class="top-actions">
+      <span id="status" class="status live">● LIVE</span>
+      <button class="top-btn">◯ User</button><button class="top-btn">▣ Scheduler</button><button class="top-btn">◌ Auto</button>
+      <button class="exchange">◈ Delta Exchange <span>⌄</span></button><button id="refreshBtn" class="icon-btn" aria-label="Refresh">↻</button>
+    </div>
+  </header>
 
-<section class="selector card">
-  <div class="quick"><button class="symbol active" data-symbol="BTCUSD">₿ BTC/USD</button><button class="symbol" data-symbol="ETHUSD">Ξ ETH/USD</button></div>
-  <div class="search-wrap"><span>⌕</span><input id="cryptoSearch" autocomplete="off" placeholder="Search Delta crypto…"><div id="searchResults" class="search-results"></div></div>
-</section>
+  <div class="market-toolbar">
+    <div class="quick"><button class="symbol active" data-symbol="BTCUSD">₿ BTC/USD</button><button class="symbol" data-symbol="ETHUSD">Ξ ETH/USD</button></div>
+    <div class="search-wrap"><span>⌕</span><input id="cryptoSearch" autocomplete="off" placeholder="Search Delta crypto (BTC, ETH...)"/><div id="searchResults" class="search-results"></div></div>
+    <div class="last-update">Last Update: <b id="updateStatus">—</b></div>
+  </div>
 
-<main class="dashboard-grid">
-<div class="main-col">
-<section class="card hero">
-  <div class="section-head"><div><span class="eyebrow">LIVE MARKET</span><h2 id="marketSymbol">BTC/USD</h2></div><span id="dataState" class="live-pill">● LIVE</span></div>
-  <div class="hero-grid"><div><div id="price" class="price">—</div><div id="change" class="change">—</div></div><div class="decision-box"><span class="eyebrow">NAKSHATRA AI DECISION</span><strong id="decision">WAIT</strong><span id="confidence">Strength —/100</span></div></div>
-  <div class="market-row"><div><small>MARKET TREND</small><b id="marketTrend">—</b></div><div><small>TREND STRENGTH</small><b id="trendStrengthTop">—</b></div><div><small>SERVER</small><b id="serverMs">—</b></div></div>
-</section>
+  <main class="dashboard-grid">
+    <div class="main-col">
+      <section class="card market-hero">
+        <div class="section-head"><div><span class="eyebrow">LIVE MARKET</span><h2 id="marketSymbol">BTC/USD</h2></div><span id="dataState" class="live-pill">● LIVE</span></div>
+        <div class="hero-content">
+          <div class="price-block"><div id="price" class="price">—</div><div id="change" class="change">—</div></div>
+          <div class="market-stats"><div><small>DAY HIGH</small><b id="dayHigh">—</b></div><div><small>DAY LOW</small><b id="dayLow">—</b></div><div><small>24H VOLUME</small><b id="volume24">—</b></div><div><small>OPEN INTEREST</small><b id="openInterest">—</b></div></div>
+        </div>
+        <div class="tf-tabs"><button>1m</button><button>5m</button><button class="active">15m</button><button>1H</button><button>4H</button><button>1D</button></div>
+        <div class="chart-wrap"><svg id="priceChart" viewBox="0 0 900 220" preserveAspectRatio="none" aria-label="Live price chart"></svg><div class="chart-empty" id="chartEmpty">Live chart loading…</div></div>
+      </section>
 
-<section class="card trade-plan"><div class="section-head"><h2>Trade Plan</h2><span id="riskState">—</span></div><div class="plan-grid"><div><small>ENTRY ZONE</small><b id="entryZone">—</b></div><div><small>STOP LOSS</small><b id="stopLoss">—</b></div><div><small>TP1</small><b id="tp1">—</b></div><div><small>TP2</small><b id="tp2">—</b></div><div><small>TP3</small><b id="tp3">—</b></div><div><small>RISK / REWARD</small><b id="rr">—</b></div></div></section>
+      <section class="card trade-plan-card">
+        <div class="section-title"><span class="title-icon cyan">⌑</span><h2>TRADE PLAN</h2></div>
+        <div class="plan-grid"><div><small>ENTRY ZONE</small><b id="entryZone">—</b></div><div><small>STOP LOSS</small><b class="red" id="stopLoss">—</b></div><div><small>TARGET 1</small><b class="green" id="tp1">—</b></div><div><small>TARGET 2</small><b class="green" id="tp2">—</b></div><div><small>TARGET 3</small><b class="green" id="tp3">—</b></div><div><small>RISK / REWARD</small><b id="rr">—</b></div></div>
+      </section>
 
-<section class="card"><div class="section-head"><h2>Why AI Says <span id="whyDecision">WAIT</span></h2><span id="agreementMini">Agreement —</span></div><div id="reasons" class="reason-list"></div></section>
+      <section class="card intraday-card">
+        <div class="section-title"><span class="title-icon cyan">◫</span><h2>INTRADAY INTELLIGENCE</h2><span id="activityRegime" class="muted right">—</span></div>
+        <div class="intel-grid"><div><small>TREND</small><b id="intradayTrend">—</b></div><div><small>MOMENTUM</small><b id="momentum">—</b></div><div><small>VOLUME</small><b id="volumeRegime">—</b></div><div><small>RSI</small><b id="rsiSmall">—</b></div><div><small>ADX</small><b id="adxSmall">—</b></div><div><small>VOLATILITY</small><b id="volatilitySmall">—</b></div></div>
+        <div class="reversal-strip"><div><small>5M</small><b id="tf5">—</b></div><div><small>15M</small><b id="tf15">—</b></div><div><small>1H</small><b id="tf1h">—</b></div><div><small>4H / 1D</small><b id="tf4h">—</b></div><div><small>RVOL</small><b id="relativeVolume">—</b></div></div>
+        <div class="window-grid"><div><span>Reversal Zone</span><b id="reversalLevel">—</b></div><div><span>Confirmation</span><b id="confirmationLevel">—</b></div><div><span>Probable Window</span><b id="reversalWindow">—</b></div></div>
+      </section>
 
-<section class="card"><div class="section-head"><h2>Intraday Intelligence</h2><span id="activityRegime">—</span></div><div class="intel-grid"><div><small>5M</small><b id="tf5">—</b></div><div><small>15M</small><b id="tf15">—</b></div><div><small>1H</small><b id="tf1h">—</b></div><div><small>4H / 1D</small><b id="tf4h">—</b></div><div><small>RVOL</small><b id="relativeVolume">—</b></div><div><small>VOLUME</small><b id="volumeRegime">—</b></div></div><div class="window-box"><span>Reversal Zone</span><strong id="reversalLevel">—</strong></div><div class="window-box"><span>Confirmation</span><strong id="confirmationLevel">—</strong></div><div class="window-box"><span>Probable Reversal Window</span><strong id="reversalWindow">—</strong></div></section>
+      <section class="card catalyst-card">
+        <div class="section-title"><span class="title-icon purple">♟</span><h2>NEXT MARKET CATALYST</h2><span id="eventRisk" class="risk-badge">NORMAL</span></div>
+        <div id="catalyst" class="catalyst-list"></div><div id="eventDisclaimer" class="feed-note"></div>
+      </section>
 
-<section class="card"><div class="section-head"><h2>Next Market Catalyst</h2><span id="eventRisk">NORMAL</span></div><div id="catalyst" class="catalyst"></div><div class="news-note" id="eventDisclaimer"></div></section>
+      <section class="card option-card">
+        <div class="section-title"><span class="title-icon amber">◉</span><h2 id="optionTitle">OPTION INTELLIGENCE</h2><span id="expiry">Expiry —</span></div>
+        <div class="option-top-grid"><div><small>PCR (OI)</small><b id="pcrOi">—</b></div><div><small>PCR (VOLUME)</small><b id="pcrVol">—</b></div><div><small>ATM</small><b id="atm">—</b></div><div><small>MAX PAIN</small><b id="maxPain">—</b></div><div><small>SUPPORT</small><b id="optionSupport">—</b></div><div><small>RESISTANCE</small><b id="optionResistance">—</b></div></div>
+        <div class="option-meta-grid"><div><small>TOTAL CE OI</small><b id="ceOi">—</b></div><div><small>TOTAL PE OI</small><b id="peOi">—</b></div><div><small>CE OI VALUE</small><b id="ceValue">—</b></div><div><small>PE OI VALUE</small><b id="peValue">—</b></div><div><small>OI UNIT</small><b id="oiUnit">CONTRACTS</b></div><div><small>DATA SOURCE</small><b>Delta (Live)</b></div></div>
+        <div class="option-tabs"><button class="active">Option Chain</button><button>OI Graph</button><button>PCR Trend</button><button>Max Pain</button><button>Greeks</button></div>
+        <div class="table-wrap"><table><thead><tr><th>Strike</th><th>CE LTP</th><th>CE OI</th><th>CE OI Value</th><th>PE OI</th><th>PE OI Value</th><th>PE LTP</th></tr></thead><tbody id="chain"></tbody></table></div>
+        <div class="table-foot"><span>OI = Open Interest (Contracts) • OI Value = USD • LTP = Last Traded Price</span><span>Live Delta</span></div>
+      </section>
+    </div>
 
-<section class="card"><div class="section-head"><h2>Technical Analysis</h2><span id="trend">—</span></div><div class="metrics" id="metrics"></div></section>
+    <aside class="side-col">
+      <section class="card decision-card"><div class="section-title purple-title"><span class="title-icon purple">✦</span><h2>NAKSHATRA AI DECISION</h2></div><div class="decision-layout"><div class="decision-main"><strong id="decision">WAIT</strong><span id="confidence">Strength —/100</span></div><div class="score-list"><div>Technical <b id="scoreTechnical">—</b></div><div>Options <b id="scoreOptions">—</b></div><div>Astrology <b id="scoreAstrology">—</b></div><div>Numerology <b id="scoreNumerology">—</b></div><div>Sentiment <b id="scoreSentiment">—</b></div><div>Overall <b id="scoreOverall">—</b></div></div></div><div id="aiSummary" class="ai-summary">Waiting for live analysis…</div></section>
 
-<section class="card option-card"><div class="section-head"><h2>Option Intelligence</h2><span id="expiry">—</span></div><div class="metrics" id="optionMetrics"></div><div class="tablewrap"><table><thead><tr><th>Strike</th><th>CE LTP</th><th>CE OI</th><th>PE OI</th><th>PE LTP</th></tr></thead><tbody id="chain"></tbody></table></div></section>
+      <section class="card reasons-card"><div class="section-title"><span class="title-icon purple">▣</span><h2>WHY AI SAYS <span id="whyDecision">WAIT</span>?</h2></div><div id="reasons" class="reason-list"></div></section>
+
+      <section class="card sentiment-card"><div class="section-title"><span class="title-icon purple">◉</span><h2>MARKET SENTIMENT</h2></div><div class="sentiment-row"><div class="gauge"><div class="gauge-arc"></div><strong id="sentimentScore">—</strong><span id="sentimentBias">—</span></div><div class="sentiment-list"><div>Fear & Greed <b>—</b></div><div>Social Media <b>—</b></div><div>News Flow <b>—</b></div><div>Options Flow <b>—</b></div></div></div></section>
+
+      <section class="card technical-card"><div class="section-title"><span class="title-icon purple">▣</span><h2>TECHNICAL ANALYSIS</h2><span id="trend">—</span></div><div id="metrics" class="metric-list"></div></section>
+
+      <section class="card mtf-card"><div class="section-title"><span class="title-icon cyan">◫</span><h2>MULTI-TIMEFRAME TREND</h2></div><div class="mtf-grid"><div><small>5m</small><b id="mtf5">—</b></div><div><small>15m</small><b id="mtf15">—</b></div><div><small>1H</small><b id="mtf1h">—</b></div><div><small>4H</small><b id="mtf4h">—</b></div><div><small>1D</small><b id="mtf1d">—</b></div></div></section>
+
+      <section class="card factors-card"><div class="section-title"><span class="title-icon purple">▣</span><h2>SIGNAL FACTORS</h2></div><div class="factor-list"><div>Technical <b id="moduleTechnical">—</b></div><div>Options <b id="moduleOption">—</b></div><div>Astrology <b id="moduleAstrology">—</b></div><div>Numerology <b id="moduleNumerology">—</b></div></div></section>
+
+      <section class="card compact"><div class="section-title"><span class="title-icon purple">✦</span><h2>ASTROLOGY & NUMEROLOGY</h2></div><div id="astroRows" class="analysis-rows"></div><div class="divider"></div><div id="numRows" class="analysis-rows"></div></section>
+
+      <section class="card compact"><div class="section-title"><span class="title-icon amber">⌁</span><h2>RISK METRICS</h2></div><div id="riskRows" class="analysis-rows"></div></section>
+
+      <section class="card compact"><div class="section-title"><span class="title-icon purple">↗</span><h2>LIVE SCANNER</h2></div><div id="scanner">Loading…</div></section>
+
+      <section class="card compact"><div class="section-title"><span class="title-icon cyan">▤</span><h2>RECENT TRADES</h2></div><div class="table-wrap"><table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>P/L</th><th>Status</th></tr></thead><tbody id="trades"></tbody></table></div></section>
+    </aside>
+  </main>
+
+  <nav class="mobile-nav"><button class="active">⌂<span>Home</span></button><button>⌁<span>Markets</span></button><button>✦<span>AI Signal</span></button><button>▣<span>Scanner</span></button><button>•••<span>More</span></button></nav>
+  <footer><span>© 2026 NAKSHATRA AI • Data: Delta Exchange (Live)</span><span>Auto refresh 10s • Not financial advice</span></footer>
 </div>
-
-<aside class="side-col">
-<section class="card compact"><h2>Signal Factors</h2><div class="factor-list"><div><span>Technical</span><b id="moduleTechnical">—</b></div><div><span>Options</span><b id="moduleOption">—</b></div><div><span>Astrology</span><b id="moduleAstrology">—</b></div><div><span>Numerology</span><b id="moduleNumerology">—</b></div></div></section>
-<section class="card compact"><h2>Astrology & Numerology</h2><div id="astroRows" class="analysis-rows"></div><div class="divider"></div><div id="numRows" class="analysis-rows"></div></section>
-<section class="card compact"><h2>Option Positioning</h2><div id="optionSideRows" class="analysis-rows"></div></section>
-<section class="card compact"><h2>Live Scanner</h2><div id="scanner">Loading...</div></section>
-<section class="card compact"><h2>Recent Trades</h2><div class="tablewrap"><table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>P&L</th><th>Status</th></tr></thead><tbody id="trades"></tbody></table></div></section>
-<section class="card compact"><h2>Equity Curve</h2><div id="equitySummary" class="equity-summary">Loading trade history…</div></section>
-</aside>
-</main>
-<footer><span>NAKSHATRA AI • Accuracy first • Fast AI analysis</span><span>Auto refresh 10s</span></footer>
-</div><script src="/static/app.js?v=5.0.0"></script></body></html>
+<script src="/static/app.js?v=6.0.0"></script>
+</body>
+</html>
