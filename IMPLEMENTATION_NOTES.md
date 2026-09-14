@@ -1,0 +1,19 @@
+NAKSHATRA AI v4 — Intraday Intelligence Upgrade
+Target UI remains the approved dark navy/neon reference.
+Included
+Intraday trend + trend strength
+Relative volume (RVOL) and volume regime
+Volatility-derived reversal level and confirmation level
+Probable reversal window (not an exact timestamp prediction)
+Session/liquidity regime and effect explanation
+Event/news impact watchlist and risk framework
+Existing Technical / Astrology / Numerology / Option Chain / MTF / Agreement UI
+Replace/add
+analysis/signal.py — replace
+templates/dashboard.html — replace
+static/style.css — replace
+static/app.js — replace
+market_context.py — ADD at project root
+Important
+The event/news module intentionally does not invent live event timestamps or live headlines. It exposes a transparent impact model until an official economic-calendar/news feed is connected. Reversal times are shown as probabilistic windows, not exact forecasts.
+No changes are required to delta.py or history.py for this upgrade.
