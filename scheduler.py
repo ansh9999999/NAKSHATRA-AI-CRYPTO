@@ -1,26 +1,54 @@
+"""
+NAKSHATRA AI
+Scheduler
+"""
+
 from apscheduler.schedulers.background import BackgroundScheduler
-from analysis.signal import generate_signal
-from history import get_history
-from telegram import send_message
 
-scheduler=BackgroundScheduler()
-last_alert={}
+from scanner import market_scan
+from monitor.trade_monitor import monitor_open_trades
 
-def market_scan():
-    for symbol in ("BTCUSD","ETHUSD"):
-        try:
-            result=generate_signal(get_history(symbol,"5m",250),symbol)
-            sig=result.get("signal")
-            if sig not in ("BUY","SELL"): continue
-            key=f"{symbol}:{sig}"
-            if last_alert.get(symbol)==sig: continue
-            last_alert[symbol]=sig
-            msg=(f"🚨 NAKSHATRA CRYPTO SIGNAL\n\n{symbol} • {sig}\nPrice: {result.get('price')}\n"
-                 f"Confidence: {result.get('confidence')}%\nScore: {result.get('overall_score')}\nTrend: {result.get('trend')}\n\n"
-                 + "\n".join(f"• {x}" for x in result.get("reasons",[])[:6]))
-            send_message(msg)
-            print(f"Signal sent: {key}")
-        except Exception as e: print(f"Scheduler {symbol}: {e}")
+from logger import logger
 
-scheduler.add_job(market_scan,"interval",minutes=5,max_instances=1)
-scheduler.start()
+
+scheduler = BackgroundScheduler()
+
+
+def start_scheduler():
+
+    if scheduler.running:
+        logger.info("Scheduler already running")
+        return
+
+    # Run market scanner every 5 minutes
+    scheduler.add_job(
+        market_scan,
+        "interval",
+        minutes=5,
+        id="market_scan",
+        replace_existing=True
+    )
+
+    # Monitor open trades every 1 minute
+    scheduler.add_job(
+        monitor_open_trades,
+        "interval",
+        minutes=1,
+        id="trade_monitor",
+        replace_existing=True
+    )
+
+    scheduler.start()
+
+    logger.info("===================================")
+    logger.info("NAKSHATRA AI Scheduler Started")
+    logger.info("Market Scan : Every 5 Minutes")
+    logger.info("Trade Monitor : Every 1 Minute")
+    logger.info("===================================")
+
+
+def stop_scheduler():
+
+    if scheduler.running:
+        scheduler.shutdown()
+        logger.info("Scheduler Stopped")
