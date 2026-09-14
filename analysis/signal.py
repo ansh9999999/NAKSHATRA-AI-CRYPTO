@@ -147,6 +147,26 @@ def _option_analysis(symbol, spot):
                 "pcr_oi": None, "pcr_volume": None, "atm": None, "support": None,
                 "resistance": None, "max_pain": None, "atm_chain": []}
 
+    # Normalize both the current CE/PE schema and legacy Delta field names.
+    normalized_rows = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        rr = dict(r)
+        ctype = str(rr.get("type") or rr.get("contract_type") or "").lower()
+        if ctype in ("call_options", "call", "ce"):
+            rr["type"] = "CE"
+        elif ctype in ("put_options", "put", "pe"):
+            rr["type"] = "PE"
+        strike = rr.get("strike")
+        if strike is None:
+            strike = rr.get("strike_price")
+        rr["strike"] = _num(strike, None) if strike is not None else None
+        if rr.get("ltp") is None:
+            rr["ltp"] = rr.get("close") or rr.get("mark_price")
+        normalized_rows.append(rr)
+
+    rows = normalized_rows
     calls = [r for r in rows if r.get("type") == "CE"]
     puts = [r for r in rows if r.get("type") == "PE"]
     strikes = sorted({r["strike"] for r in rows if r.get("strike") is not None})
