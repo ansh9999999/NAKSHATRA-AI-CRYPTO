@@ -120,12 +120,14 @@ def get_ticker(symbol="BTCUSD"):
         return {
             "symbol": result.get("symbol", symbol),
             "price": _float(price),
-            "mark_price": _float(
-                result.get("mark_price", price)
-            ),
-            "volume": _float(
-                result.get("volume", 0)
-            ),
+            "mark_price": _float(result.get("mark_price", price)),
+            "volume": _float(result.get("volume", 0)),
+            "volume_24h": _float(result.get("volume_24h", result.get("volume", 0))),
+            "change_24h": result.get("price_change_24h", result.get("change_24h", result.get("price_change"))),
+            "day_high": result.get("high", result.get("day_high")),
+            "day_low": result.get("low", result.get("day_low")),
+            "oi": result.get("oi"),
+            "open_interest": result.get("oi", result.get("open_interest")),
         }
 
     except Exception as exc:
