@@ -1,160 +1,542 @@
-import re
-import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+"""
+NAKSHATRA AI v4.0
+Delta Exchange India - Market Data Helper
 
+This file provides:
+- Live ticker
+- Live price
+- Mark price
+- Volume
+- Candle history
+- Safe timestamp handling
+
+IMPORTANT:
+This is the ROOT delta.py.
+It is NOT broker/delta.py.
+"""
+
+import time
 import requests
+import pandas as pd
+
+
+# ==========================================================
+# DELTA EXCHANGE INDIA
+# ==========================================================
 
 BASE_URL = "https://api.india.delta.exchange/v2"
-TIMEOUT = 20
-SUPPORTED = {"BTCUSD": "BTC", "ETHUSD": "ETH"}
-RESOLUTIONS = {"5m": 300, "15m": 900, "1h": 3600, "1d": 86400, "1w": 604800}
+
+TIMEOUT = 15
 
 
-def _get(path: str, params: Optional[dict] = None) -> dict:
-    r = requests.get(f"{BASE_URL}{path}", params=params or {}, headers={"Accept": "application/json"}, timeout=TIMEOUT)
-    r.raise_for_status()
-    return r.json()
+# ==========================================================
+# HTTP SESSION
+# ==========================================================
+
+session = requests.Session()
+
+session.headers.update({
+    "User-Agent": "NAKSHATRA-AI/4.0",
+    "Accept": "application/json",
+})
 
 
-def get_ticker(symbol: str = "BTCUSD") -> dict:
-    symbol = symbol.upper()
-    if symbol not in SUPPORTED:
-        raise ValueError("Unsupported crypto symbol")
-    data = _get(f"/tickers/{symbol}").get("result") or {}
-    return {
-        "symbol": symbol,
-        "ltp": _num(data.get("close") or data.get("mark_price")),
-        "mark_price": _num(data.get("mark_price")),
-        "volume": _num(data.get("volume")),
-        "open_interest": _num(data.get("oi") or data.get("open_interest")),
-        "change_24h": _num(data.get("price_change_24h") or data.get("ltp_change_24h")),
-        "raw": data,
-    }
+# ==========================================================
+# SAFE NUMBER
+# ==========================================================
 
-
-def get_candles(symbol: str = "BTCUSD", resolution: str = "5m", limit: int = 250) -> List[dict]:
-    symbol = symbol.upper()
-    if symbol not in SUPPORTED or resolution not in RESOLUTIONS:
-        return []
-    seconds = RESOLUTIONS[resolution]
-    limit = max(50, min(int(limit), 500))
-    end = int(time.time())
-    end -= end % seconds
-    start = end - (limit * seconds)
+def _float(value, default=0.0):
     try:
-        data = _get("/history/candles", {"symbol": symbol, "resolution": resolution, "start": start, "end": end})
-        rows = []
-        for c in data.get("result", []) or []:
-            rows.append({
-                "time": int(c["time"]),
-                "open": float(c["open"]),
-                "high": float(c["high"]),
-                "low": float(c["low"]),
-                "close": float(c["close"]),
-                "volume": float(c.get("volume", 0) or 0),
-            })
-        rows.sort(key=lambda x: x["time"])
-        return rows[-limit:]
-    except Exception as e:
-        print(f"Delta history error {symbol} {resolution}: {e}")
-        return []
+        return float(value)
+    except Exception:
+        return default
 
 
-def _num(v: Any) -> Optional[float]:
+# ==========================================================
+# SAFE TIMESTAMP
+# ==========================================================
+
+def _timestamp_seconds(value):
+    """
+    Convert Delta timestamp safely to seconds.
+
+    Supports:
+    - seconds
+    - milliseconds
+    - microseconds
+    """
+
     try:
-        return round(float(v), 8) if v is not None else None
-    except (TypeError, ValueError):
+        ts = int(value)
+    except Exception:
         return None
 
+    # milliseconds
+    if ts > 10_000_000_000:
+        ts = ts // 1000
 
-def _expiry_from_product(p: dict) -> Optional[str]:
-    for key in ("expiry", "expiry_date", "maturity_date"):
-        value = p.get(key)
-        if value:
-            text = str(value)[:10]
-            try:
-                datetime.strptime(text, "%Y-%m-%d")
-                return text
-            except ValueError:
-                pass
-    m = re.search(r"-(\d{6})$", str(p.get("symbol", "")))
-    if m:
-        try:
-            return datetime.strptime(m.group(1), "%d%m%y").date().isoformat()
-        except ValueError:
+    # microseconds
+    if ts > 10_000_000_000:
+        ts = ts // 1000
+
+    return ts
+
+
+# ==========================================================
+# LIVE TICKER
+# ==========================================================
+
+def get_ticker(symbol="BTCUSD"):
+    """
+    Get live ticker from Delta Exchange India.
+    """
+
+    symbol = str(symbol).upper().strip()
+
+    try:
+        url = f"{BASE_URL}/tickers/{symbol}"
+
+        response = session.get(
+            url,
+            timeout=TIMEOUT
+        )
+
+        response.raise_for_status()
+
+        payload = response.json()
+
+        result = payload.get("result")
+
+        if not result:
             return None
-    return None
 
+        price = (
+            result.get("close")
+            or result.get("mark_price")
+            or result.get("spot_price")
+        )
 
-def _nearest_expiry(asset: str) -> Optional[str]:
-    try:
-        data = _get("/products", {
-            "contract_types": "call_options,put_options",
-            "states": "live,upcoming",
-            "page_size": 100,
-        })
-        today = datetime.now(timezone.utc).date()
-        expiries = set()
-        for p in data.get("result", []) or []:
-            sym = str(p.get("symbol", ""))
-            underlying = str(p.get("underlying_asset_symbol", ""))
-            if underlying.upper() != asset.upper() and not sym.startswith((f"C-{asset}-", f"P-{asset}-")):
-                continue
-            exp = _expiry_from_product(p)
-            if exp and datetime.strptime(exp, "%Y-%m-%d").date() >= today:
-                expiries.add(exp)
-        return sorted(expiries)[0] if expiries else None
-    except Exception as e:
-        print(f"Delta expiry discovery error {asset}: {e}")
+        return {
+            "symbol": result.get("symbol", symbol),
+            "price": _float(price),
+            "mark_price": _float(
+                result.get("mark_price", price)
+            ),
+            "volume": _float(
+                result.get("volume", 0)
+            ),
+        }
+
+    except Exception as exc:
+
+        print(
+            f"Delta ticker error [{symbol}]: {exc}"
+        )
+
         return None
 
 
-def get_option_chain(symbol: str = "BTCUSD") -> dict:
-    symbol = symbol.upper()
-    asset = SUPPORTED.get(symbol)
-    if not asset:
-        return {"status": "NOT_SUPPORTED", "rows": []}
-    expiry = _nearest_expiry(asset)
-    params = {
-        "contract_types": "call_options,put_options",
-        "underlying_asset_symbols": asset,
-    }
-    if expiry:
-        params["expiry_date"] = datetime.strptime(expiry, "%Y-%m-%d").strftime("%d-%m-%Y")
+# ==========================================================
+# CURRENT PRICE
+# ==========================================================
+
+def get_current_price(symbol="BTCUSD"):
+    """
+    Return only current market price.
+    """
+
+    ticker = get_ticker(symbol)
+
+    if not ticker:
+        return None
+
+    price = ticker.get("price")
+
+    if price is None:
+        return None
+
+    return float(price)
+
+
+# ==========================================================
+# CANDLE RESOLUTION
+# ==========================================================
+
+RESOLUTION_SECONDS = {
+
+    "1m": 60,
+
+    "3m": 180,
+
+    "5m": 300,
+
+    "15m": 900,
+
+    "30m": 1800,
+
+    "1h": 3600,
+
+    "2h": 7200,
+
+    "4h": 14400,
+
+    "6h": 21600,
+
+    "12h": 43200,
+
+    "1d": 86400,
+
+    "1w": 604800,
+
+}
+
+
+# ==========================================================
+# GET CANDLES
+# ==========================================================
+
+def get_candles(
+    symbol="BTCUSD",
+    resolution="5m",
+    limit=200
+):
+    """
+    Download historical candles.
+
+    Returns pandas DataFrame.
+
+    Columns:
+        timestamp
+        open
+        high
+        low
+        close
+        volume
+    """
+
+    symbol = str(symbol).upper().strip()
+    resolution = str(resolution).lower().strip()
+
+    if resolution not in RESOLUTION_SECONDS:
+        resolution = "5m"
+
     try:
-        result = _get("/tickers", params).get("result", []) or []
-        rows = []
-        for x in result:
-            opt = str(x.get("contract_type", ""))
-            if opt not in ("call_options", "put_options"):
-                continue
-            rows.append({
-                "symbol": x.get("symbol"),
-                "type": "CE" if opt == "call_options" else "PE",
-                "strike": _num(x.get("strike_price")),
-                "ltp": _num(x.get("close") or x.get("mark_price")),
-                "mark_price": _num(x.get("mark_price")),
-                "oi": _num(x.get("oi") or x.get("open_interest")) or 0,
-                "volume": _num(x.get("volume")) or 0,
-                "iv": _num((x.get("greeks") or {}).get("iv") or x.get("mark_volatility")),
-                "delta": _num((x.get("greeks") or {}).get("delta")),
-            })
-        rows = [r for r in rows if r["strike"] is not None]
-        rows.sort(key=lambda r: (r["strike"], r["type"]))
-        actual_expiry = expiry
-        if not actual_expiry and rows:
-            m = re.search(r"-(\d{6})$", str(rows[0].get("symbol", "")))
-            if m:
-                actual_expiry = datetime.strptime(m.group(1), "%d%m%y").date().isoformat()
-        return {"status": "OK" if rows else "EMPTY", "symbol": symbol, "underlying": asset, "expiry": actual_expiry, "rows": rows}
-    except Exception as e:
-        return {"status": "ERROR", "symbol": symbol, "underlying": asset, "expiry": expiry, "rows": [], "error": str(e)}
+        limit = int(limit)
+    except Exception:
+        limit = 200
+
+    limit = max(10, min(limit, 1000))
+
+    candle_seconds = RESOLUTION_SECONDS[resolution]
+
+    # ------------------------------------------------------
+    # IMPORTANT
+    # Delta history API expects start/end timestamps.
+    # ------------------------------------------------------
+
+    now = int(time.time())
+
+    end = now - (now % candle_seconds)
+
+    start = end - (
+        limit * candle_seconds
+    )
+
+    url = f"{BASE_URL}/history/candles"
+
+    params = {
+        "symbol": symbol,
+        "resolution": resolution,
+        "start": start,
+        "end": end,
+    }
+
+    try:
+
+        response = session.get(
+            url,
+            params=params,
+            timeout=TIMEOUT
+        )
+
+        response.raise_for_status()
+
+        payload = response.json()
+
+        rows = payload.get("result", [])
+
+        if not rows:
+            print(
+                f"Delta: no candles "
+                f"{symbol} {resolution}"
+            )
+
+            return pd.DataFrame()
+
+        df = pd.DataFrame(rows)
+
+        if df.empty:
+            return pd.DataFrame()
+
+        # --------------------------------------------------
+        # TIMESTAMP
+        # --------------------------------------------------
+
+        if "time" in df.columns:
+
+            df["timestamp"] = (
+                df["time"]
+                .apply(_timestamp_seconds)
+            )
+
+        elif "timestamp" in df.columns:
+
+            df["timestamp"] = (
+                df["timestamp"]
+                .apply(_timestamp_seconds)
+            )
+
+        else:
+
+            print(
+                f"Delta: timestamp missing "
+                f"{symbol} {resolution}"
+            )
+
+            return pd.DataFrame()
+
+        # --------------------------------------------------
+        # OHLCV
+        # --------------------------------------------------
+
+        numeric_columns = [
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+        ]
+
+        for column in numeric_columns:
+
+            if column in df.columns:
+
+                df[column] = pd.to_numeric(
+                    df[column],
+                    errors="coerce"
+                )
+
+            else:
+
+                # Missing volume should not kill
+                # the complete candle dataset.
+                if column == "volume":
+
+                    df[column] = 0.0
+
+                else:
+
+                    print(
+                        f"Delta: missing {column} "
+                        f"{symbol} {resolution}"
+                    )
+
+                    return pd.DataFrame()
+
+        # --------------------------------------------------
+        # CLEAN
+        # --------------------------------------------------
+
+        df.dropna(
+            subset=[
+                "timestamp",
+                "open",
+                "high",
+                "low",
+                "close",
+            ],
+            inplace=True
+        )
+
+        if df.empty:
+            return pd.DataFrame()
+
+        # --------------------------------------------------
+        # DATETIME
+        # --------------------------------------------------
+
+        df["datetime"] = pd.to_datetime(
+            df["timestamp"],
+            unit="s",
+            utc=True
+        )
+
+        # --------------------------------------------------
+        # SORT
+        # --------------------------------------------------
+
+        df.sort_values(
+            "timestamp",
+            inplace=True
+        )
+
+        df.reset_index(
+            drop=True,
+            inplace=True
+        )
+
+        # --------------------------------------------------
+        # FINAL COLUMN ORDER
+        # --------------------------------------------------
+
+        columns = [
+            "timestamp",
+            "datetime",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+        ]
+
+        available = [
+            column
+            for column in columns
+            if column in df.columns
+        ]
+
+        df = df[available]
+
+        print(
+            f"Delta candles OK: "
+            f"{symbol} {resolution} "
+            f"rows={len(df)}"
+        )
+
+        return df
+
+    except requests.RequestException as exc:
+
+        print(
+            f"Delta candle request error "
+            f"[{symbol} {resolution}]: {exc}"
+        )
+
+        return pd.DataFrame()
+
+    except Exception as exc:
+
+        print(
+            f"Delta candle error "
+            f"[{symbol} {resolution}]: {exc}"
+        )
+
+        return pd.DataFrame()
 
 
-def get_btc():
-    return get_ticker("BTCUSD")
+# ==========================================================
+# ALIAS
+# ==========================================================
+
+def get_history(
+    symbol="BTCUSD",
+    resolution="5m",
+    limit=200
+):
+    """
+    Compatibility wrapper.
+    """
+
+    return get_candles(
+        symbol=symbol,
+        resolution=resolution,
+        limit=limit
+    )
 
 
-def get_eth():
-    return get_ticker("ETHUSD")
+# ==========================================================
+# MULTI TIMEFRAME
+# ==========================================================
+
+def get_multi_timeframe_history(
+    symbol="BTCUSD",
+    limit=200
+):
+    """
+    Return all supported analysis timeframes.
+    """
+
+    timeframes = [
+        "5m",
+        "15m",
+        "1h",
+        "1d",
+        "1w",
+    ]
+
+    result = {}
+
+    for timeframe in timeframes:
+
+        result[timeframe] = get_candles(
+            symbol=symbol,
+            resolution=timeframe,
+            limit=limit
+        )
+
+    return result
+
+
+# ==========================================================
+# TEST
+# ==========================================================
+
+if __name__ == "__main__":
+
+    print("=" * 60)
+    print("NAKSHATRA AI - DELTA CONNECTION TEST")
+    print("=" * 60)
+
+    # ------------------------------------------------------
+    # BTC ticker
+    # ------------------------------------------------------
+
+    btc = get_ticker("BTCUSD")
+
+    print("\nBTC TICKER:")
+    print(btc)
+
+    # ------------------------------------------------------
+    # ETH ticker
+    # ------------------------------------------------------
+
+    eth = get_ticker("ETHUSD")
+
+    print("\nETH TICKER:")
+    print(eth)
+
+    # ------------------------------------------------------
+    # BTC candles
+    # ------------------------------------------------------
+
+    candles = get_candles(
+        "BTCUSD",
+        "5m",
+        20
+    )
+
+    print("\nBTC 5M CANDLES:")
+
+    if candles.empty:
+
+        print("NO CANDLE DATA")
+
+    else:
+
+        print(
+            candles.tail(5).to_string(
+                index=False
+            )
+        )
+
+    print("=" * 60)
