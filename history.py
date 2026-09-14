@@ -1,13 +1,6 @@
 """
 NAKSHATRA AI CRYPTO
 Multi-Timeframe Historical Data Engine
-
-Provides:
-- get_history()
-- get_multi_timeframe_history()
-
-Timeframes:
-5m, 15m, 1h, 4h, 1d
 """
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -16,13 +9,14 @@ import time
 import pandas as pd
 import requests
 
-from config import DELTA_BASE_URL
 from logger import logger
 
 
 # ==========================================================
-# SETTINGS
+# DELTA EXCHANGE INDIA
 # ==========================================================
+
+BASE_URL = "https://api.india.delta.exchange/v2"
 
 RESOLUTIONS = (
     "5m",
@@ -36,22 +30,16 @@ DEFAULT_LIMIT = 200
 TIMEOUT_SECONDS = 10
 RETRIES = 1
 
-# Small cache so dashboard refreshes don't repeatedly hit Delta
 _CACHE = {}
 _CACHE_TTL = 8
 
 
 # ==========================================================
-# DELTA ENDPOINT
+# ENDPOINT
 # ==========================================================
 
 def _endpoint():
-    base = str(DELTA_BASE_URL).rstrip("/")
-
-    if base.endswith("/v2"):
-        return f"{base}/history/candles"
-
-    return f"{base}/v2/history/candles"
+    return f"{BASE_URL}/history/candles"
 
 
 # ==========================================================
@@ -72,7 +60,7 @@ def _empty():
 
 
 # ==========================================================
-# FETCH ONE TIMEFRAME
+# FETCH HISTORY
 # ==========================================================
 
 def _fetch_history(
@@ -99,6 +87,7 @@ def _fetch_history(
     cached = _CACHE.get(key)
 
     if cached:
+
         cache_time, cached_df = cached
 
         if now - cache_time < _CACHE_TTL:
@@ -123,14 +112,16 @@ def _fetch_history(
     }.get(resolution)
 
     if interval_seconds is None:
+
         logger.warning(
-            "Unsupported Delta resolution: %s",
+            "Unsupported resolution: %s",
             resolution,
         )
+
         return _empty()
 
     # ------------------------------------------------------
-    # TIME WINDOW
+    # TIME RANGE
     # ------------------------------------------------------
 
     end = int(time.time())
@@ -151,7 +142,7 @@ def _fetch_history(
     last_error = None
 
     # ------------------------------------------------------
-    # REQUEST / RETRY
+    # REQUEST
     # ------------------------------------------------------
 
     for attempt in range(RETRIES + 1):
@@ -171,23 +162,21 @@ def _fetch_history(
             rows = payload.get("result") or []
 
             if not isinstance(rows, list):
+
                 raise ValueError(
-                    "Unexpected Delta candle response"
+                    "Invalid Delta candle response"
                 )
 
             if not rows:
+
                 raise ValueError(
-                    f"No candles returned for "
-                    f"{symbol} {resolution}"
+                    f"No candles for {symbol} {resolution}"
                 )
 
             df = pd.DataFrame(rows)
 
             if df.empty:
-                raise ValueError(
-                    f"Empty dataframe for "
-                    f"{symbol} {resolution}"
-                )
+                return _empty()
 
             # --------------------------------------------------
             # TIMESTAMP
@@ -197,6 +186,7 @@ def _fetch_history(
                 "time" in df.columns
                 and "timestamp" not in df.columns
             ):
+
                 df.rename(
                     columns={
                         "time": "timestamp"
@@ -205,7 +195,7 @@ def _fetch_history(
                 )
 
             # --------------------------------------------------
-            # NUMERIC COLUMNS
+            # NUMERIC DATA
             # --------------------------------------------------
 
             numeric_columns = [
@@ -226,7 +216,7 @@ def _fetch_history(
                     )
 
             # --------------------------------------------------
-            # REQUIRED COLUMNS
+            # REQUIRED DATA
             # --------------------------------------------------
 
             required_columns = [
@@ -250,7 +240,7 @@ def _fetch_history(
                 )
 
             # --------------------------------------------------
-            # CLEAN DATA
+            # CLEAN
             # --------------------------------------------------
 
             df.dropna(
@@ -259,6 +249,7 @@ def _fetch_history(
             )
 
             if "volume" not in df.columns:
+
                 df["volume"] = 0.0
 
             df["volume"] = pd.to_numeric(
@@ -311,10 +302,11 @@ def _fetch_history(
             )
 
             if attempt < RETRIES:
+
                 time.sleep(0.25)
 
     # ------------------------------------------------------
-    # FAILURE
+    # FAILED
     # ------------------------------------------------------
 
     logger.warning(
@@ -328,7 +320,7 @@ def _fetch_history(
 
 
 # ==========================================================
-# SINGLE TIMEFRAME API
+# SINGLE TIMEFRAME
 # ==========================================================
 
 def get_history(
@@ -345,28 +337,13 @@ def get_history(
 
 
 # ==========================================================
-# MULTI-TIMEFRAME API
+# MULTI TIMEFRAME
 # ==========================================================
 
 def get_multi_timeframe_history(
     symbol,
     limit=DEFAULT_LIMIT,
 ):
-    """
-    Fetch multiple timeframes concurrently.
-
-    Returns:
-
-    {
-        "5m":  DataFrame,
-        "15m": DataFrame,
-        "1h":  DataFrame,
-        "4h":  DataFrame,
-        "1d":  DataFrame
-    }
-
-    A failed timeframe does not stop the complete analysis.
-    """
 
     symbol = str(symbol).upper()
 
