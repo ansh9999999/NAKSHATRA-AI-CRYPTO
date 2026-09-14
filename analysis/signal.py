@@ -225,8 +225,16 @@ def _option_analysis(symbol, spot):
         "pcr_oi": round(pcr, 3) if pcr is not None else None,
         "pcr_volume": round(vpcr, 3) if vpcr is not None else None,
         "atm": atm, "support": support, "resistance": resistance, "max_pain": max_pain,
-        "call_oi": round(call_oi), "put_oi": round(put_oi),
-        "call_volume": round(call_vol), "put_volume": round(put_vol),
+        # Delta `oi` is open interest in contracts. Keep contract OI
+        # separate from `oi_value`, which is the notional/base-currency value.
+        "oi_unit": "contracts",
+        "call_oi": round(call_oi, 3), "put_oi": round(put_oi, 3),
+        "call_oi_contracts": round(call_oi, 3),
+        "put_oi_contracts": round(put_oi, 3),
+        "call_oi_value": round(sum(_num(r.get("oi_value")) for r in calls), 3),
+        "put_oi_value": round(sum(_num(r.get("oi_value")) for r in puts), 3),
+        "oi_value_symbol": next((str(r.get("oi_value_symbol")) for r in rows if r.get("oi_value_symbol")), "USD"),
+        "call_volume": round(call_vol, 3), "put_volume": round(put_vol, 3),
         "atm_chain": atm_chain,
         "top_call_oi": [{"strike": r["strike"], "oi": r.get("oi", 0)} for r in sorted(calls, key=lambda r: _num(r.get("oi")), reverse=True)[:5]],
         "top_put_oi": [{"strike": r["strike"], "oi": r.get("oi", 0)} for r in sorted(puts, key=lambda r: _num(r.get("oi")), reverse=True)[:5]],
