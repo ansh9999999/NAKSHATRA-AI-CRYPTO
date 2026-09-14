@@ -64,12 +64,60 @@ def _json_safe(value):
 
 
 
-def get_live_products():
-    """Return live Delta products for the crypto search box.
+def _product_row(row):
+    """Normalize one Delta product row for the dashboard/search API."""
+    symbol = str(row.get("symbol") or "").upper().strip()
+    contract_type = str(row.get("contract_type") or "").lower().strip()
+    state = str(row.get("state") or "").lower().strip()
+    trading_status = str(row.get("trading_status") or "").lower().strip()
+    return {
+        "symbol": symbol,
+        "description": row.get("description") or symbol,
+        "contract_type": contract_type,
+        "underlying": (
+            (row.get("underlying_asset") or {}).get("symbol")
+            if isinstance(row.get("underlying_asset"), dict)
+            else row.get("underlying_asset_symbol")
+        ),
+        "state": state,
+        "trading_status": trading_status,
+    }
 
-    The UI uses only products currently returned by Delta Exchange India;
-    unsupported symbols are never guessed or accepted as valid search results.
+
+def get_product(symbol):
+    """Fetch and validate one product directly from Delta.
+
+    Direct /products/{symbol} lookup is deliberately used for validation instead
+    of trusting a paginated product-list cache.  This avoids false DATA RISK when
+    the list endpoint changes ordering/pagination while the product itself is live.
     """
+    symbol = str(symbol or "").upper().strip()
+    if not symbol:
+        return None
+    try:
+        response = session.get(f"{BASE_URL}/products/{symbol}", timeout=10)
+        response.raise_for_status()
+        payload = response.json()
+        row = payload.get("result") or {}
+        if isinstance(row, list):
+            row = next((x for x in row if str(x.get("symbol", "")).upper() == symbol), {})
+        if not isinstance(row, dict) or not row.get("symbol"):
+            return None
+        item = _product_row(row)
+        if item["state"] and item["state"] != "live":
+            return None
+        if item["trading_status"] and item["trading_status"] not in {"operational", "active"}:
+            return None
+        if item["contract_type"] in {"call_options", "put_options"} or "option" in item["contract_type"]:
+            return None
+        return item
+    except Exception as exc:
+        logger.warning("Delta product lookup failed %s: %s", symbol, exc)
+        return None
+
+
+def get_live_products():
+    """Return live non-option Delta trading products for crypto search."""
     now = time.time()
     if _products_cache["items"] and now - _products_cache["time"] < PRODUCTS_TTL:
         return _products_cache["items"]
@@ -77,43 +125,63 @@ def get_live_products():
     try:
         rows = []
         after = None
-        for _ in range(10):
-            params = {"states": "live", "page_size": 100}
+        for _ in range(20):
+            params = {
+                "states": "live",
+                "contract_types": "perpetual_futures,futures",
+                "page_size": 100,
+            }
             if after:
                 params["after"] = after
-            response = session.get(
-                f"{BASE_URL}/products", params=params, timeout=10
-            )
+            response = session.get(f"{BASE_URL}/products", params=params, timeout=10)
             response.raise_for_status()
             payload = response.json()
-            rows.extend(payload.get("result", []) or [])
+            result = payload.get("result") or []
+            if isinstance(result, dict):
+                result = [result]
+            rows.extend(result)
             after = (payload.get("meta") or {}).get("after")
             if not after:
                 break
+
         items = []
         seen = set()
         for row in rows:
-            symbol = str(row.get("symbol") or "").upper().strip()
+            item = _product_row(row)
+            symbol = item["symbol"]
             if not symbol or symbol in seen:
                 continue
-            seen.add(symbol)
-            contract_type = str(row.get("contract_type") or row.get("contract_types") or "")
-            product_type = str(row.get("product_type") or "")
-            # Keep live crypto trading instruments; options remain available
-            # to the analysis engine when their underlying is selected.
-            if contract_type in {"call_options", "put_options"} or "option" in product_type.lower():
+            if item["state"] not in {"", "live"}:
                 continue
-            items.append({
-                "symbol": symbol,
-                "description": row.get("description") or symbol,
-                "contract_type": contract_type or product_type,
-                "underlying": row.get("underlying_asset_symbol") or row.get("underlying_asset_symbols"),
-            })
+            if item["trading_status"] and item["trading_status"] not in {"operational", "active"}:
+                continue
+            if item["contract_type"] not in {"perpetual_futures", "futures"}:
+                continue
+            seen.add(symbol)
+            items.append(item)
+
+        # Always verify the two dashboard quick buttons directly. This is also a
+        # fallback if the paginated product list is temporarily incomplete.
+        for quick in ("BTCUSD", "ETHUSD"):
+            if quick not in seen:
+                item = get_product(quick)
+                if item and item["symbol"] not in seen:
+                    items.append(item)
+                    seen.add(item["symbol"])
+
         items.sort(key=lambda x: (x["symbol"] not in {"BTCUSD", "ETHUSD"}, x["symbol"]))
         _products_cache.update({"time": now, "items": items})
         return items
     except Exception as exc:
         logger.warning("Delta products failed: %s", exc)
+        # Keep the dashboard usable even if the paginated search endpoint fails.
+        fallback = []
+        for quick in ("BTCUSD", "ETHUSD"):
+            item = get_product(quick)
+            if item:
+                fallback.append(item)
+        if fallback:
+            _products_cache.update({"time": now, "items": fallback})
         return _products_cache["items"]
 
 def run_analysis(symbol: str, force=False):
@@ -142,8 +210,18 @@ def run_analysis(symbol: str, force=False):
             return result
 
         # Preserve the existing signal engine exactly.
-        data["symbol"] = symbol
-        result = generate_signal(data)
+        entry = data.get("5m") if isinstance(data, dict) else data
+        if entry is None or getattr(entry, "empty", True):
+            result = {
+                "status": "NO DATA",
+                "symbol": symbol,
+                "message": "Delta 5m candle data unavailable",
+                "server_time": time.time(),
+            }
+            _analysis_cache[symbol] = {"time": time.time(), "result": result}
+            return result
+
+        result = generate_signal(entry, symbol=symbol)
         result = _json_safe(result)
 
         if isinstance(result, dict):
@@ -236,9 +314,15 @@ def api_products(q: str = ""):
 @app.get("/api/live")
 def api_live(symbol: str = "BTCUSD", force: bool = False):
     symbol = symbol.upper().strip()
-    valid = {x["symbol"] for x in get_live_products()}
-    if valid and symbol not in valid:
-        return {"status": "NO DATA", "symbol": symbol, "message": "Symbol is not a live Delta Exchange product"}
+    product = get_product(symbol)
+    if product is None:
+        valid = {x["symbol"] for x in get_live_products()}
+        if symbol not in valid:
+            return {
+                "status": "NO DATA",
+                "symbol": symbol,
+                "message": "Symbol is not a live Delta Exchange product",
+            }
     analysis = run_analysis(symbol, force=force)
 
     ticker = None
