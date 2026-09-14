@@ -6,6 +6,7 @@ from math import floor, sin, pi
 from analysis.indicators import ema, rsi, macd, atr, trend
 from delta import get_option_chain
 from history import get_history
+from market_context import session_context, event_context
 
 
 def _num(v, default=0.0):
@@ -256,6 +257,56 @@ def generate_signal(df=None, symbol="BTCUSD"):
 
     tech = max(-80, min(80, score))
     option = _option_analysis(symbol, price)
+    session = session_context()
+    events = event_context()
+
+    # Relative volume: compare the latest 5m bar with the previous 20 bars.
+    vol_avg = float(v.iloc[-21:-1].mean()) if len(v) > 21 else float(v.mean())
+    rvol = (float(v.iloc[-1]) / vol_avg) if vol_avg > 0 else 1.0
+    if rvol >= 2.0:
+        volume_regime = 'EXTREME'
+    elif rvol >= 1.5:
+        volume_regime = 'HIGH'
+    elif rvol >= 1.15:
+        volume_regime = 'ELEVATED'
+    elif rvol < 0.70:
+        volume_regime = 'LOW'
+    else:
+        volume_regime = 'NORMAL'
+
+    # Price reversal levels are volatility-derived, not guaranteed predictions.
+    atr_value = float(atr(h, l, c).iloc[-1])
+    resistance_level = round(price + 1.5 * atr_value, 2)
+    support_level = round(price - 1.5 * atr_value, 2)
+    trend_bias = 'BULLISH' if tech > 10 else 'BEARISH' if tech < -10 else 'NEUTRAL'
+    reversal_level = resistance_level if trend_bias == 'BEARISH' else support_level if trend_bias == 'BULLISH' else price
+    confirmation_level = round(reversal_level + (0.5 * atr_value if trend_bias == 'BEARISH' else -0.5 * atr_value), 2)
+
+    # Use historical time-of-day volume concentration to estimate a window, not an exact reversal time.
+    hour = _candle_datetime(df).astimezone(timezone.utc).hour
+    if 13 <= hour <= 15:
+        reversal_window = 'US / Europe overlap — elevated reversal risk'
+    elif 8 <= hour <= 10:
+        reversal_window = 'Europe activity window — elevated reversal risk'
+    elif 0 <= hour <= 3:
+        reversal_window = 'Asia activity window — moderate reversal risk'
+    else:
+        reversal_window = 'Next high-liquidity session window'
+    intraday_intelligence = {
+        'current_trend': trend(c),
+        'trend_strength': min(100, int(abs(tech) + abs(option.get('score', 0)))),
+        'relative_volume': round(rvol, 2),
+        'volume_regime': volume_regime,
+        'support_level': support_level,
+        'reversal_level': reversal_level,
+        'confirmation_level': confirmation_level,
+        'probable_reversal_window': reversal_window,
+        'reversal_probability': min(85, max(15, int(35 + abs(tech) * 0.25 + (15 if volume_regime in ('HIGH','EXTREME') else 0)))),
+        'session': session,
+        'events': events,
+        'event_effect': events.get('next_event', {}).get('effect') if events.get('next_event') else None,
+        'risk_note': 'A reversal window is probabilistic; do not treat it as an exact forecast.'
+    }
     astrology = _astrology(_candle_datetime(df))
     numerology = _numerology(_candle_datetime(df), symbol)
 
@@ -289,6 +340,7 @@ def generate_signal(df=None, symbol="BTCUSD"):
         "technical": {"signal": technical_bias, "confidence": min(99, abs(tech)), "score": tech, "reasons": reasons[:8]},
         "astrology": astrology, "numerology": numerology, "option_chain": option,
         "intraday_trend": _intraday(symbol),
+        "intraday_intelligence": intraday_intelligence,
         "agreement": agreement,
         "agreement_detail": {"technical": technical_bias, "astrology": astrology["bias"], "numerology": numerology["bias"], "option_chain": option.get("signal", "NEUTRAL"), "final": agreement, "bullish": bullish, "bearish": bearish},
         "timestamp": _candle_datetime(df).isoformat(),
