@@ -136,6 +136,11 @@ def _option_analysis(symbol, spot):
     except Exception as exc:
         return {"status": "ERROR", "signal": "NEUTRAL", "confidence": 0, "reason": str(exc), "rows": []}
 
+    # Accept both the current mapping response and a legacy raw-list response.
+    if isinstance(chain, list):
+        chain = {"status": "OK", "symbol": symbol, "rows": chain}
+    elif not isinstance(chain, dict):
+        chain = {"status": "ERROR", "symbol": symbol, "rows": [], "reason": "Invalid option-chain response"}
     rows = chain.get("rows", []) or []
     if not rows:
         return {**chain, "score": 0, "signal": "NEUTRAL", "confidence": 0,
