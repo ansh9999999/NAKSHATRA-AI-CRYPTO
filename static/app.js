@@ -18,3 +18,54 @@ async function scanner(){try{const r=await fetch('/api/scanner?_='+Date.now(),{c
 async function trades(){try{const r=await fetch('/api/history?_='+Date.now(),{cache:'no-store'});const arr=await r.json();$('trades').innerHTML=(arr||[]).slice(-8).reverse().map(x=>`<tr><td>${esc(x.symbol)}</td><td>${esc(x.side||x.signal)}</td><td>${esc(fmt(x.entry))}</td><td>${esc(fmt(x.pnl))}</td><td>${esc(x.status||x.result)}</td></tr>`).join('')||'<tr><td colspan="5">No trades yet</td></tr>'}catch(e){$('trades').innerHTML='<tr><td colspan="5">Trade history unavailable</td></tr>'}}
 async function searchProducts(q){clearTimeout(productTimer);if(!q){$('searchResults').innerHTML='';return}productTimer=setTimeout(async()=>{try{const r=await fetch(`/api/products?q=${encodeURIComponent(q)}`);const d=await r.json();$('searchResults').innerHTML=(d.products||[]).slice(0,8).map(p=>`<button class="result-item" data-symbol="${esc(p.symbol)}"><b>${esc(p.symbol)}</b><small>${esc(p.description||p.contract_type||'Delta product')}</small></button>`).join('')||'<div class="result-item">No live Delta crypto found</div>';document.querySelectorAll('.result-item').forEach(b=>b.onclick=()=>selectSymbol(b.dataset.symbol))}catch(e){$('searchResults').innerHTML='<div class="result-item">Search unavailable</div>'}},180)}
 document.querySelectorAll('.symbol').forEach(b=>b.onclick=()=>selectSymbol(b.dataset.symbol));$('cryptoSearch').addEventListener('input',e=>searchProducts(e.target.value));$('refreshBtn')?.addEventListener('click',()=>{load();scanner();trades()});document.addEventListener('click',e=>{if(!e.target.closest('.search-wrap'))$('searchResults').innerHTML=''});load();scanner();trades();setInterval(()=>{load();scanner()},10000);
+
+// ===== Interactive mobile controls =====
+let lastAnalysis = null;
+function activateButtons(selector, active){document.querySelectorAll(selector).forEach(b=>b.classList.toggle('active',b===active));}
+function setupInteractiveUI(){
+  document.querySelectorAll('.tf-tabs button').forEach(btn=>btn.addEventListener('click',()=>{
+    activateButtons('.tf-tabs button',btn);
+    const tf=btn.dataset.tf;
+    const map={'1m':'1m','5m':'5m','15m':'15m','1H':'1h','4H':'4h','1D':'1d'};
+    const key=map[tf];
+    const frame=lastAnalysis?.analysis?.intraday_trend?.timeframes?.find(x=>String(x.timeframe).toLowerCase()===key);
+    const label=frame?.trend||'DATA UNAVAILABLE';
+    const trendEl=$('intradayTrend');
+    if(trendEl){trendEl.textContent=`${tf}: ${label}`;tone(trendEl,label);}
+    document.querySelector('.intraday-card')?.scrollIntoView({behavior:'smooth',block:'center'});
+  }));
+
+  document.querySelectorAll('.option-tabs button').forEach(btn=>btn.addEventListener('click',()=>{
+    activateButtons('.option-tabs button',btn);
+    renderOptionTab(btn.dataset.optionTab||'chain');
+  }));
+
+  const navMap={home:'homeSection',markets:'marketsSection',ai:'aiSection',scanner:'scannerSection',more:'moreSection'};
+  document.querySelectorAll('.mobile-nav button').forEach(btn=>btn.addEventListener('click',()=>{
+    activateButtons('.mobile-nav button',btn);
+    const target=document.getElementById(navMap[btn.dataset.nav]);
+    target?.scrollIntoView({behavior:'smooth',block:'start'});
+  }));
+}
+function renderOptionTab(tab){
+  const panel=$('optionChainPanel'), extra=$('optionExtra');
+  if(!panel||!extra)return;
+  panel.hidden=tab!=='chain'; extra.hidden=tab==='chain';
+  if(tab==='chain'){extra.innerHTML='';return;}
+  const o=lastAnalysis?.analysis?.option_chain||{};
+  const rows=o.atm_chain||[];
+  if(tab==='oi'){
+    const top=[...rows].sort((a,b)=>((Number(b.call_oi)||0)+(Number(b.put_oi)||0))-((Number(a.call_oi)||0)+(Number(a.put_oi)||0))).slice(0,8);
+    extra.innerHTML='<div class="extra-title">OI CONCENTRATION <small>Highest contracts around ATM</small></div>'+top.map(r=>`<div class="bar-row"><span>${fmt(r.strike,0)}</span><i><em style="width:${Math.min(100,((Number(r.call_oi)||0)+(Number(r.put_oi)||0))/Math.max(1,...top.map(x=>(Number(x.call_oi)||0)+(Number(x.put_oi)||0)))*100)}%"></em></i><b>${fmt((Number(r.call_oi)||0)+(Number(r.put_oi)||0),3)}</b></div>`).join('')||'<div class="muted">OI data unavailable</div>';
+  } else if(tab==='pcr'){
+    extra.innerHTML=`<div class="extra-grid"><div><small>PCR OI</small><strong>${fmt(o.pcr_oi,3)}</strong></div><div><small>PCR VOLUME</small><strong>${fmt(o.pcr_volume,3)}</strong></div><div><small>CE OI</small><strong>${fmt(o.call_oi_contracts??o.call_oi,3)}</strong></div><div><small>PE OI</small><strong>${fmt(o.put_oi_contracts??o.put_oi,3)}</strong></div></div><p class="muted">PCR &gt; 1 means PE open interest exceeds CE open interest.</p>`;
+  } else if(tab==='pain'){
+    extra.innerHTML=`<div class="focus-value"><small>MAX PAIN</small><strong>${fmt(o.max_pain,0)}</strong><span>ATM ${fmt(o.atm,0)} • Support ${fmt(o.support,0)} • Resistance ${fmt(o.resistance,0)}</span></div>`;
+  } else if(tab==='greeks'){
+    const greeks=rows.filter(r=>r.strike!=null).slice(0,8);
+    extra.innerHTML='<div class="table-wrap"><table><thead><tr><th>Strike</th><th>CE Δ</th><th>PE Δ</th><th>CE IV</th><th>PE IV</th></tr></thead><tbody>'+greeks.map(r=>`<tr><td>${fmt(r.strike,0)}</td><td>${fmt(r.call_delta,3)}</td><td>${fmt(r.put_delta,3)}</td><td>${fmt(r.call_iv,3)}</td><td>${fmt(r.put_iv,3)}</td></tr>`).join('')+'</tbody></table></div>';
+  }
+}
+const _render=render;
+render=function(a){lastAnalysis=a;_render(a);const active=document.querySelector('.option-tabs button.active');if(active)renderOptionTab(active.dataset.optionTab||'chain');};
+setupInteractiveUI();
