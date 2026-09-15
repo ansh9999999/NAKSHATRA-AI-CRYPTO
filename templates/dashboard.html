@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050a18">
   <title>NAKSHATRA AI — Crypto Intelligence</title>
-  <link rel="stylesheet" href="/static/style.css?v=6.0.0">
+  <link rel="stylesheet" href="/static/style.css?v=6.1.0">
 </head>
 <body>
 <div class="app-shell">
@@ -26,17 +26,17 @@
 
   <main class="dashboard-grid">
     <div class="main-col">
-      <section class="card market-hero">
+      <section id="homeSection" class="card market-hero">
         <div class="section-head"><div><span class="eyebrow">LIVE MARKET</span><h2 id="marketSymbol">BTC/USD</h2></div><span id="dataState" class="live-pill">● LIVE</span></div>
         <div class="hero-content">
           <div class="price-block"><div id="price" class="price">—</div><div id="change" class="change">—</div></div>
           <div class="market-stats"><div><small>DAY HIGH</small><b id="dayHigh">—</b></div><div><small>DAY LOW</small><b id="dayLow">—</b></div><div><small>24H VOLUME</small><b id="volume24">—</b></div><div><small>OPEN INTEREST</small><b id="openInterest">—</b></div></div>
         </div>
-        <div class="tf-tabs"><button>1m</button><button>5m</button><button class="active">15m</button><button>1H</button><button>4H</button><button>1D</button></div>
+        <div class="tf-tabs" role="tablist" aria-label="Timeframe"><button data-tf="1m">1m</button><button data-tf="5m">5m</button><button data-tf="15m" class="active">15m</button><button data-tf="1H">1H</button><button data-tf="4H">4H</button><button data-tf="1D">1D</button></div>
 </div>
       </section>
 
-      <section class="card trade-plan-card">
+      <section id="marketsSection" class="card trade-plan-card">
         <div class="section-title"><span class="title-icon cyan">⌑</span><h2>TRADE PLAN</h2></div>
         <div class="plan-grid"><div><small>ENTRY ZONE</small><b id="entryZone">—</b></div><div><small>STOP LOSS</small><b class="red" id="stopLoss">—</b></div><div><small>TARGET 1</small><b class="green" id="tp1">—</b></div><div><small>TARGET 2</small><b class="green" id="tp2">—</b></div><div><small>TARGET 3</small><b class="green" id="tp3">—</b></div><div><small>RISK / REWARD</small><b id="rr">—</b></div></div>
       </section>
@@ -57,14 +57,15 @@
         <div class="section-title"><span class="title-icon amber">◉</span><h2 id="optionTitle">OPTION INTELLIGENCE</h2><span id="expiry">Expiry —</span></div>
         <div class="option-top-grid"><div><small>PCR (OI)</small><b id="pcrOi">—</b></div><div><small>PCR (VOLUME)</small><b id="pcrVol">—</b></div><div><small>ATM</small><b id="atm">—</b></div><div><small>MAX PAIN</small><b id="maxPain">—</b></div><div><small>SUPPORT</small><b id="optionSupport">—</b></div><div><small>RESISTANCE</small><b id="optionResistance">—</b></div></div>
         <div class="option-meta-grid"><div><small>TOTAL CE OI</small><b id="ceOi">—</b></div><div><small>TOTAL PE OI</small><b id="peOi">—</b></div><div><small>CE OI VALUE</small><b id="ceValue">—</b></div><div><small>PE OI VALUE</small><b id="peValue">—</b></div><div><small>OI UNIT</small><b id="oiUnit">CONTRACTS</b></div><div><small>DATA SOURCE</small><b>Delta (Live)</b></div></div>
-        <div class="option-tabs"><button class="active">Option Chain</button><button>OI Graph</button><button>PCR Trend</button><button>Max Pain</button><button>Greeks</button></div>
-        <div class="table-wrap"><table><thead><tr><th>Strike</th><th>CE LTP</th><th>CE OI</th><th>CE OI Value</th><th>PE OI</th><th>PE OI Value</th><th>PE LTP</th></tr></thead><tbody id="chain"></tbody></table></div>
-        <div class="table-foot"><span>OI = Open Interest (Contracts) • OI Value = USD • LTP = Last Traded Price</span><span>Live Delta</span></div>
+        <div class="option-tabs" role="tablist" aria-label="Option intelligence"><button class="active" data-option-tab="chain">Option Chain</button><button data-option-tab="oi">OI Graph</button><button data-option-tab="pcr">PCR Trend</button><button data-option-tab="pain">Max Pain</button><button data-option-tab="greeks">Greeks</button></div>
+        <div id="optionExtra" class="option-extra" hidden></div>
+        <div id="optionChainPanel" class="option-panel"><div class="table-wrap"><table><thead><tr><th>Strike</th><th>CE LTP</th><th>CE OI</th><th>CE OI Value</th><th>PE OI</th><th>PE OI Value</th><th>PE LTP</th></tr></thead><tbody id="chain"></tbody></table></div>
+        </div><div class="table-foot"><span>OI = Open Interest (Contracts) • OI Value = USD • LTP = Last Traded Price</span><span>Live Delta</span></div>
       </section>
     </div>
 
     <aside class="side-col">
-      <section class="card decision-card"><div class="section-title purple-title"><span class="title-icon purple">✦</span><h2>NAKSHATRA AI DECISION</h2></div><div class="decision-layout"><div class="decision-main"><strong id="decision">WAIT</strong><span id="confidence">Strength —/100</span></div><div class="score-list"><div>Technical <b id="scoreTechnical">—</b></div><div>Options <b id="scoreOptions">—</b></div><div>Astrology <b id="scoreAstrology">—</b></div><div>Numerology <b id="scoreNumerology">—</b></div><div>Sentiment <b id="scoreSentiment">—</b></div><div>Overall <b id="scoreOverall">—</b></div></div></div><div id="aiSummary" class="ai-summary">Waiting for live analysis…</div></section>
+      <section id="aiSection" class="card decision-card"><div class="section-title purple-title"><span class="title-icon purple">✦</span><h2>NAKSHATRA AI DECISION</h2></div><div class="decision-layout"><div class="decision-main"><strong id="decision">WAIT</strong><span id="confidence">Strength —/100</span></div><div class="score-list"><div>Technical <b id="scoreTechnical">—</b></div><div>Options <b id="scoreOptions">—</b></div><div>Astrology <b id="scoreAstrology">—</b></div><div>Numerology <b id="scoreNumerology">—</b></div><div>Sentiment <b id="scoreSentiment">—</b></div><div>Overall <b id="scoreOverall">—</b></div></div></div><div id="aiSummary" class="ai-summary">Waiting for live analysis…</div></section>
 
       <section class="card reasons-card"><div class="section-title"><span class="title-icon purple">▣</span><h2>WHY AI SAYS <span id="whyDecision">WAIT</span>?</h2></div><div id="reasons" class="reason-list"></div></section>
 
@@ -80,15 +81,15 @@
 
       <section class="card compact"><div class="section-title"><span class="title-icon amber">⌁</span><h2>RISK METRICS</h2></div><div id="riskRows" class="analysis-rows"></div></section>
 
-      <section class="card compact"><div class="section-title"><span class="title-icon purple">↗</span><h2>LIVE SCANNER</h2></div><div id="scanner">Loading…</div></section>
+      <section id="scannerSection" class="card compact"><div class="section-title"><span class="title-icon purple">↗</span><h2>LIVE SCANNER</h2></div><div id="scanner">Loading…</div></section>
 
-      <section class="card compact"><div class="section-title"><span class="title-icon cyan">▤</span><h2>RECENT TRADES</h2></div><div class="table-wrap"><table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>P/L</th><th>Status</th></tr></thead><tbody id="trades"></tbody></table></div></section>
+      <section id="moreSection" class="card compact"><div class="section-title"><span class="title-icon cyan">▤</span><h2>RECENT TRADES</h2></div><div class="table-wrap"><table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>P/L</th><th>Status</th></tr></thead><tbody id="trades"></tbody></table></div></section>
     </aside>
   </main>
 
-  <nav class="mobile-nav"><button class="active">⌂<span>Home</span></button><button>⌁<span>Markets</span></button><button>✦<span>AI Signal</span></button><button>▣<span>Scanner</span></button><button>•••<span>More</span></button></nav>
+  <nav class="mobile-nav"><button class="active" data-nav="home">⌂<span>Home</span></button><button data-nav="markets">⌁<span>Markets</span></button><button data-nav="ai">✦<span>AI Signal</span></button><button data-nav="scanner">▣<span>Scanner</span></button><button data-nav="more">•••<span>More</span></button></nav>
   <footer><span>© 2026 NAKSHATRA AI • Data: Delta Exchange (Live)</span><span>Auto refresh 10s • Not financial advice</span></footer>
 </div>
-<script src="/static/app.js?v=6.0.0"></script>
+<script src="/static/app.js?v=6.1.0"></script>
 </body>
 </html>
