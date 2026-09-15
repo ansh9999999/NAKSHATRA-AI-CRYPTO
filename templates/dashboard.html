@@ -57,6 +57,12 @@
         <div class="section-title"><span class="title-icon amber">◉</span><h2 id="optionTitle">OPTION INTELLIGENCE</h2><span id="expiry">Expiry —</span></div>
         <div class="option-top-grid"><div><small>PCR (OI)</small><b id="pcrOi">—</b></div><div><small>PCR (VOLUME)</small><b id="pcrVol">—</b></div><div><small>ATM</small><b id="atm">—</b></div><div><small>MAX PAIN</small><b id="maxPain">—</b></div><div><small>SUPPORT</small><b id="optionSupport">—</b></div><div><small>RESISTANCE</small><b id="optionResistance">—</b></div></div>
         <div class="option-meta-grid"><div><small>TOTAL CE OI</small><b id="ceOi">—</b></div><div><small>TOTAL PE OI</small><b id="peOi">—</b></div><div><small>CE OI VALUE</small><b id="ceValue">—</b></div><div><small>PE OI VALUE</small><b id="peValue">—</b></div><div><small>OI UNIT</small><b id="oiUnit">CONTRACTS</b></div><div><small>DATA SOURCE</small><b>Delta (Live)</b></div></div>
+        <div class="option-ai-box">
+          <div class="option-ai-head"><div><small>NAKSHATRA OPTION AI</small><b id="optionAiBias">WAIT</b></div><span id="optionAiConfidence">Confidence —/100</span></div>
+          <div id="optionAiSummary" class="option-ai-summary">Waiting for live option-chain analysis…</div>
+          <div id="optionAiReasons" class="option-ai-reasons"></div>
+          <div class="option-ai-levels"><span>Put OI Wall <b id="putWall">—</b></span><span>Call OI Wall <b id="callWall">—</b></span></div>
+        </div>
         <div class="option-tabs" role="tablist" aria-label="Option intelligence"><button class="active" data-option-tab="chain">Option Chain</button><button data-option-tab="oi">OI Graph</button><button data-option-tab="pcr">PCR Trend</button><button data-option-tab="pain">Max Pain</button><button data-option-tab="greeks">Greeks</button></div>
         <div id="optionExtra" class="option-extra" hidden></div>
         <div id="optionChainPanel" class="option-panel"><div class="table-wrap"><table><thead><tr><th>Strike</th><th>CE LTP</th><th>CE OI</th><th>CE OI Value</th><th>PE OI</th><th>PE OI Value</th><th>PE LTP</th></tr></thead><tbody id="chain"></tbody></table></div>
