@@ -182,8 +182,19 @@ def _option_analysis(symbol, spot):
     put_vol = sum(_num(r.get("volume")) for r in puts)
     pcr = put_oi / call_oi if call_oi else None
     vpcr = put_vol / call_vol if call_vol else None
-    support = max(puts, key=lambda r: _num(r.get("oi")))["strike"] if puts else None
-    resistance = max(calls, key=lambda r: _num(r.get("oi")))["strike"] if calls else None
+    # OI-based levels must be directionally meaningful around spot.
+    # Support = strongest PE OI at/below spot.
+    # Resistance = strongest CE OI at/above spot.
+    # This avoids the old bug where both could resolve to the same strike
+    # simply because that strike had the largest absolute OI.
+    put_support_candidates = [r for r in puts if r["strike"] <= spot]
+    call_resistance_candidates = [r for r in calls if r["strike"] >= spot]
+    support = (max(put_support_candidates, key=lambda r: _num(r.get("oi")))["strike"]
+               if put_support_candidates else
+               (max(puts, key=lambda r: _num(r.get("oi")))["strike"] if puts else None))
+    resistance = (max(call_resistance_candidates, key=lambda r: _num(r.get("oi")))["strike"]
+                  if call_resistance_candidates else
+                  (max(calls, key=lambda r: _num(r.get("oi")))["strike"] if calls else None))
 
     max_pain = None
     min_pain = None
@@ -193,19 +204,74 @@ def _option_analysis(symbol, spot):
         if min_pain is None or pain < min_pain:
             min_pain, max_pain = pain, k
 
-    score = 0
+    # --------------------------------------------------------------
+    # OPTION-CHAIN AI / POSITIONING ENGINE
+    # --------------------------------------------------------------
+    # This is a deterministic market-structure model, not a claim of
+    # machine-learning prediction. It combines PCR, near-ATM OI walls,
+    # max-pain displacement and volume PCR. Missing/weak data reduces
+    # confidence rather than inventing a directional signal.
+    score = 0.0
     reasons = []
+
     if pcr is not None:
-        if pcr >= 1.20: score += 25; reasons.append(f"PCR {pcr:.2f} is bullish")
-        elif pcr >= 1.00: score += 10; reasons.append(f"PCR {pcr:.2f} mildly bullish")
-        elif pcr <= 0.75: score -= 25; reasons.append(f"PCR {pcr:.2f} is bearish")
-        else: score -= 10; reasons.append(f"PCR {pcr:.2f} mildly bearish")
+        if pcr >= 1.35:
+            score += 25; reasons.append(f"PCR {pcr:.2f} shows put-OI dominance")
+        elif pcr >= 1.15:
+            score += 15; reasons.append(f"PCR {pcr:.2f} is moderately bullish")
+        elif pcr <= 0.70:
+            score -= 25; reasons.append(f"PCR {pcr:.2f} shows call-OI dominance")
+        elif pcr <= 0.85:
+            score -= 15; reasons.append(f"PCR {pcr:.2f} is moderately bearish")
+        else:
+            reasons.append(f"PCR {pcr:.2f} is neutral")
+
+    # OI walls in a local band around spot. A put wall below spot acts
+    # as support; a call wall above spot acts as resistance.
+    local_puts = [r for r in puts if r["strike"] <= spot]
+    local_calls = [r for r in calls if r["strike"] >= spot]
+    put_wall = max(local_puts, key=lambda r: _num(r.get("oi")), default=None)
+    call_wall = max(local_calls, key=lambda r: _num(r.get("oi")), default=None)
+    put_wall_oi = _num(put_wall.get("oi")) if put_wall else 0.0
+    call_wall_oi = _num(call_wall.get("oi")) if call_wall else 0.0
+    if put_wall and call_wall and (put_wall_oi + call_wall_oi) > 0:
+        wall_delta = (put_wall_oi - call_wall_oi) / max(put_wall_oi + call_wall_oi, 1e-9)
+        score += max(-15, min(15, wall_delta * 30))
+        if put_wall_oi > call_wall_oi * 1.15:
+            reasons.append(f"Put OI wall {put_wall['strike']:,.0f} stronger than call wall")
+        elif call_wall_oi > put_wall_oi * 1.15:
+            reasons.append(f"Call OI wall {call_wall['strike']:,.0f} stronger than put wall")
+        else:
+            reasons.append("Call/put OI walls are balanced")
+
     if vpcr is not None:
-        if vpcr >= 1.10: score += 10; reasons.append("Volume PCR supports buyers")
-        elif vpcr <= 0.80: score -= 10; reasons.append("Volume PCR supports sellers")
-    score = max(-35, min(35, score))
-    signal = "BUY" if score >= 20 else "SELL" if score <= -20 else "NEUTRAL"
-    confidence = int(round(abs(score) / 35 * 100))
+        if vpcr >= 1.20:
+            score += 10; reasons.append("Option volume favors puts")
+        elif vpcr <= 0.80:
+            score -= 10; reasons.append("Option volume favors calls")
+
+    if max_pain is not None and spot:
+        displacement = (max_pain - spot) / spot
+        if displacement > 0.015:
+            score += 8; reasons.append("Max pain is above spot")
+        elif displacement < -0.015:
+            score -= 8; reasons.append("Max pain is below spot")
+
+    score = int(round(max(-35, min(35, score))))
+    signal = "BUY" if score >= 18 else "SELL" if score <= -18 else "NEUTRAL"
+    confidence = int(round(min(100, abs(score) / 35 * 100)))
+    option_bias = "BULLISH" if score >= 12 else "BEARISH" if score <= -12 else "NEUTRAL"
+    positioning = (
+        "PUT OI DOMINANCE" if pcr is not None and pcr >= 1.15 else
+        "CALL OI DOMINANCE" if pcr is not None and pcr <= 0.85 else
+        "BALANCED POSITIONING"
+    )
+    option_ai_summary = (
+        f"Options AI: {option_bias} ({confidence}/100). {positioning}. "
+        f"Key levels: support {support:,.0f} / resistance {resistance:,.0f}."
+        if support is not None and resistance is not None
+        else f"Options AI: {option_bias} ({confidence}/100). Positioning: {positioning}."
+    )
 
     nearby = sorted(strikes, key=lambda x: abs(x - atm))[:11]
     atm_chain = []
@@ -225,6 +291,17 @@ def _option_analysis(symbol, spot):
         "pcr_oi": round(pcr, 3) if pcr is not None else None,
         "pcr_volume": round(vpcr, 3) if vpcr is not None else None,
         "atm": atm, "support": support, "resistance": resistance, "max_pain": max_pain,
+        "option_ai_bias": option_bias,
+        "option_ai_signal": signal,
+        "option_ai_confidence": confidence,
+        "option_ai_score": score,
+        "option_ai_positioning": positioning,
+        "option_ai_summary": option_ai_summary,
+        "option_ai_reasons": reasons[:6],
+        "put_wall": put_wall["strike"] if put_wall else None,
+        "put_wall_oi": round(put_wall_oi, 3),
+        "call_wall": call_wall["strike"] if call_wall else None,
+        "call_wall_oi": round(call_wall_oi, 3),
         # Delta `oi` is open interest in contracts. Keep contract OI
         # separate from `oi_value`, which is the notional/base-currency value.
         "oi_unit": "contracts",
