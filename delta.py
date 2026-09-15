@@ -1,4 +1,6 @@
 import re
+from datetime import date, datetime
+
 """
 NAKSHATRA AI v4.0
 Delta Exchange India - Market Data Helper
@@ -630,7 +632,10 @@ def get_option_chain(symbol="BTCUSD", expiry_date=None):
             if strike <= 0:
                 continue
 
-            expiry = row.get("expiry_date") or row.get("expiry") or _option_expiry_from_symbol(option_symbol)
+            # Prefer the expiry encoded in the actual Delta option symbol.
+            # Some ticker payloads omit/return inconsistent expiry metadata.
+            symbol_expiry = _option_expiry_from_symbol(option_symbol)
+            expiry = symbol_expiry or row.get("expiry_date") or row.get("expiry")
             ltp = _float(row.get("close"), 0.0)
             if ltp <= 0:
                 ltp = _float(row.get("mark_price"), 0.0)
@@ -661,18 +666,29 @@ def get_option_chain(symbol="BTCUSD", expiry_date=None):
                 "vega": _float(greeks.get("vega"), 0.0),
             })
 
-        # Select nearest expiry if no explicit expiry was requested.
+        # Select the nearest CURRENT/FUTURE expiry chronologically.
+        # Never sort DD-MM-YYYY as strings (that can incorrectly select
+        # 02-10-2026 before 19-09-2026).
+        def _expiry_date(value):
+            try:
+                return datetime.strptime(str(value), "%d-%m-%Y").date()
+            except Exception:
+                return None
+
         if not expiry_date:
             expiry_values = sorted({
                 r["expiry"] for r in normalized
-                if r.get("expiry")
-            })
-            if expiry_values:
+                if r.get("expiry") and _expiry_date(r.get("expiry"))
+            }, key=lambda v: _expiry_date(v))
+            today = date.today()
+            future = [v for v in expiry_values if _expiry_date(v) >= today]
+            if future:
+                expiry_date = future[0]
+            elif expiry_values:
                 expiry_date = expiry_values[0]
+            if expiry_date:
                 normalized = [r for r in normalized if r.get("expiry") == expiry_date]
         else:
-            # Keep a consistent display value when API returns a different
-            # representation on individual rows.
             normalized = [r for r in normalized if not r.get("expiry") or str(r.get("expiry")) == str(expiry_date)]
 
         normalized.sort(key=lambda r: (float(r.get("strike") or 0), r.get("type") or ""))
