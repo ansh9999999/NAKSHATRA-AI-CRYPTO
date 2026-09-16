@@ -420,6 +420,77 @@ def generate_signal(df=None, symbol="BTCUSD"):
     astrology = _astrology(_candle_datetime(df))
     numerology = _numerology(_candle_datetime(df), symbol)
 
+    # ------------------------------------------------------------
+    # ALWAYS BUILD A TRADE PLAN
+    # ------------------------------------------------------------
+    # The dashboard must not go blank when the final recommendation is WAIT.
+    # In WAIT mode this is a conditional/reference plan, not an instruction
+    # to trade. Levels are derived from live price + ATR and, when available,
+    # option-chain support/resistance.
+    atr_plan = max(float(atr_value), price * 0.001)
+    option_support = option.get("support")
+    option_resistance = option.get("resistance")
+    try:
+        option_support = float(option_support) if option_support is not None else None
+    except (TypeError, ValueError):
+        option_support = None
+    try:
+        option_resistance = float(option_resistance) if option_resistance is not None else None
+    except (TypeError, ValueError):
+        option_resistance = None
+
+    plan_side = "BUY" if final > 0 else "SELL" if final < 0 else "WAIT"
+    if plan_side == "BUY":
+        entry_low = min(price, option_support) if option_support and option_support < price else price - 0.25 * atr_plan
+        entry_high = price + 0.10 * atr_plan
+        stop = (option_support - 0.25 * atr_plan) if option_support and option_support < price else price - atr_plan
+        risk = max(price - stop, 0.25 * atr_plan)
+        targets = [price + risk, price + 2 * risk, price + 3 * risk]
+    elif plan_side == "SELL":
+        entry_low = price - 0.10 * atr_plan
+        entry_high = max(price, option_resistance) if option_resistance and option_resistance > price else price + 0.25 * atr_plan
+        stop = (option_resistance + 0.25 * atr_plan) if option_resistance and option_resistance > price else price + atr_plan
+        risk = max(stop - price, 0.25 * atr_plan)
+        targets = [price - risk, price - 2 * risk, price - 3 * risk]
+    else:
+        # Neutral plan: show both sides as conditional trigger zones.
+        # This keeps the important risk framework visible without inventing
+        # a directional trade while the model is conflicted.
+        buy_trigger = option_resistance if option_resistance and option_resistance > price else price + 0.5 * atr_plan
+        sell_trigger = option_support if option_support and option_support < price else price - 0.5 * atr_plan
+        entry_low = sell_trigger
+        entry_high = buy_trigger
+        stop = None
+        risk = None
+        targets = []
+
+    if plan_side in ("BUY", "SELL"):
+        trade_plan = {
+            "status": "ACTIONABLE" if rec != "WAIT" else "CONDITIONAL",
+            "side": plan_side,
+            "entry_zone": f"{round(entry_low,2):,.2f} – {round(entry_high,2):,.2f}",
+            "stop_loss": round(stop, 2),
+            "target1": round(targets[0], 2),
+            "target2": round(targets[1], 2),
+            "target3": round(targets[2], 2),
+            "risk_reward": round(2.0, 2),
+            "invalidation": round(stop, 2),
+            "note": "Conditional plan while final signal is WAIT." if rec == "WAIT" else "Derived from live price, ATR and option-chain levels."
+        }
+    else:
+        trade_plan = {
+            "status": "WAITING_FOR_CONFIRMATION",
+            "side": "WAIT",
+            "entry_zone": f"SELL < {round(sell_trigger,2):,.2f}  |  BUY > {round(buy_trigger,2):,.2f}",
+            "stop_loss": None,
+            "target1": None,
+            "target2": None,
+            "target3": None,
+            "risk_reward": None,
+            "invalidation": None,
+            "note": "No directional trade until price confirms above resistance or below support."
+        }
+
     # Preserve the old technical + option score behavior, then expose the
     # two additional modules for the comprehensive dashboard.
     final = max(-100, min(100, tech + option.get("score", 0)))
@@ -451,6 +522,7 @@ def generate_signal(df=None, symbol="BTCUSD"):
         "astrology": astrology, "numerology": numerology, "option_chain": option,
         "intraday_trend": _intraday(symbol),
         "intraday_intelligence": intraday_intelligence,
+        "trade_plan": trade_plan,
         "agreement": agreement,
         "agreement_detail": {"technical": technical_bias, "astrology": astrology["bias"], "numerology": numerology["bias"], "option_chain": option.get("signal", "NEUTRAL"), "final": agreement, "bullish": bullish, "bearish": bearish},
         "timestamp": _candle_datetime(df).isoformat(),
