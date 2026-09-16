@@ -420,6 +420,13 @@ def generate_signal(df=None, symbol="BTCUSD"):
     astrology = _astrology(_candle_datetime(df))
     numerology = _numerology(_candle_datetime(df), symbol)
 
+    # Final composite decision must be calculated before the trade plan.
+    # The previous version referenced `final` here before assigning it, which
+    # caused the scanner/runtime error: local variable 'final' is not associated with a value.
+    final = max(-100, min(100, tech + option.get("score", 0)))
+    rec = "BUY" if final >= 35 else "SELL" if final <= -35 else "WAIT"
+    confidence = round(min(99, 50 + abs(final) * 0.5), 1)
+
     # ------------------------------------------------------------
     # ALWAYS BUILD A TRADE PLAN
     # ------------------------------------------------------------
@@ -493,9 +500,6 @@ def generate_signal(df=None, symbol="BTCUSD"):
 
     # Preserve the old technical + option score behavior, then expose the
     # two additional modules for the comprehensive dashboard.
-    final = max(-100, min(100, tech + option.get("score", 0)))
-    rec = "BUY" if final >= 35 else "SELL" if final <= -35 else "WAIT"
-    confidence = round(min(99, 50 + abs(final) * 0.5), 1)
 
     technical_bias = "BULLISH" if tech >= 20 else "BEARISH" if tech <= -20 else "NEUTRAL"
     bullish = sum([
