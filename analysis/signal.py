@@ -430,10 +430,10 @@ def generate_signal(df=None, symbol="BTCUSD"):
     # ------------------------------------------------------------
     # ALWAYS BUILD A TRADE PLAN
     # ------------------------------------------------------------
-    # The dashboard must not go blank when the final recommendation is WAIT.
-    # In WAIT mode this is a conditional/reference plan, not an instruction
-    # to trade. Levels are derived from live price + ATR and, when available,
-    # option-chain support/resistance.
+    # Trade-plan levels must remain close to the live price. Option-chain
+    # walls are structural reference levels, not entry prices. Never use a
+    # distant call/put wall as the entry-zone boundary because that can
+    # produce nonsensical plans such as a 75.7k entry -> 82.4k range.
     atr_plan = max(float(atr_value), price * 0.001)
     option_support = option.get("support")
     option_resistance = option.get("resistance")
@@ -447,24 +447,42 @@ def generate_signal(df=None, symbol="BTCUSD"):
         option_resistance = None
 
     plan_side = "BUY" if final > 0 else "SELL" if final < 0 else "WAIT"
+    entry_buffer = 0.25 * atr_plan
+    stop_buffer = 0.15 * atr_plan
+
     if plan_side == "BUY":
-        entry_low = min(price, option_support) if option_support and option_support < price else price - 0.25 * atr_plan
+        # Entry is a tight pullback/near-market zone, never the distant
+        # option resistance. Prefer nearby option support when it is within
+        # 1.5 ATR of spot.
+        entry_low = price - entry_buffer
         entry_high = price + 0.10 * atr_plan
-        stop = (option_support - 0.25 * atr_plan) if option_support and option_support < price else price - atr_plan
+        stop = price - atr_plan
+        if option_support is not None and option_support < price:
+            candidate = option_support - stop_buffer
+            if price - candidate <= 1.5 * atr_plan:
+                stop = candidate
         risk = max(price - stop, 0.25 * atr_plan)
-        targets = [price + risk, price + 2 * risk, price + 3 * risk]
+        targets = [price + 1.5 * risk, price + 2.0 * risk, price + 3.0 * risk]
+
     elif plan_side == "SELL":
+        # Entry is a tight near-market zone, never the distant option
+        # resistance. Prefer nearby option resistance for the stop only when
+        # it is within 1.5 ATR of spot.
         entry_low = price - 0.10 * atr_plan
-        entry_high = max(price, option_resistance) if option_resistance and option_resistance > price else price + 0.25 * atr_plan
-        stop = (option_resistance + 0.25 * atr_plan) if option_resistance and option_resistance > price else price + atr_plan
+        entry_high = price + entry_buffer
+        stop = price + atr_plan
+        if option_resistance is not None and option_resistance > price:
+            candidate = option_resistance + stop_buffer
+            if candidate - price <= 1.5 * atr_plan:
+                stop = candidate
         risk = max(stop - price, 0.25 * atr_plan)
-        targets = [price - risk, price - 2 * risk, price - 3 * risk]
+        targets = [price - 1.5 * risk, price - 2.0 * risk, price - 3.0 * risk]
+
     else:
-        # Neutral plan: show both sides as conditional trigger zones.
-        # This keeps the important risk framework visible without inventing
-        # a directional trade while the model is conflicted.
-        buy_trigger = option_resistance if option_resistance and option_resistance > price else price + 0.5 * atr_plan
-        sell_trigger = option_support if option_support and option_support < price else price - 0.5 * atr_plan
+        # WAIT: show confirmation levels but do not invent an entry, stop or
+        # target. Use nearby option walls when available; otherwise ATR.
+        buy_trigger = option_resistance if option_resistance and option_resistance > price and option_resistance - price <= 2.0 * atr_plan else price + 0.5 * atr_plan
+        sell_trigger = option_support if option_support and option_support < price and price - option_support <= 2.0 * atr_plan else price - 0.5 * atr_plan
         entry_low = sell_trigger
         entry_high = buy_trigger
         stop = None
@@ -472,6 +490,8 @@ def generate_signal(df=None, symbol="BTCUSD"):
         targets = []
 
     if plan_side in ("BUY", "SELL"):
+        reward2 = abs(targets[1] - price)
+        rr2 = round(reward2 / risk, 2) if risk > 0 else None
         trade_plan = {
             "status": "ACTIONABLE" if rec != "WAIT" else "CONDITIONAL",
             "side": plan_side,
@@ -480,9 +500,9 @@ def generate_signal(df=None, symbol="BTCUSD"):
             "target1": round(targets[0], 2),
             "target2": round(targets[1], 2),
             "target3": round(targets[2], 2),
-            "risk_reward": round(2.0, 2),
+            "risk_reward": rr2,
             "invalidation": round(stop, 2),
-            "note": "Conditional plan while final signal is WAIT." if rec == "WAIT" else "Derived from live price, ATR and option-chain levels."
+            "note": "Derived from live price, ATR and nearby option-chain structure."
         }
     else:
         trade_plan = {
