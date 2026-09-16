@@ -51,19 +51,116 @@ def session_context(now_utc: datetime | None = None):
     }
 
 
+def _scheduled_events_2026():
+    """Known scheduled macro events shown in IST.
+
+    Times are converted from the official source calendars to Asia/Kolkata.
+    Events without a fixed release time are explicitly marked as variable.
+    """
+    return [
+        {
+            'name': 'FOMC statement / rate decision',
+            'impact': 'EXTREME',
+            'effect': 'Fed decision can sharply change yields, USD and crypto volatility.',
+            'dt': datetime(2026, 9, 16, 23, 30, tzinfo=IST),
+            'source_type': 'scheduled',
+        },
+        {
+            'name': 'FOMC press conference',
+            'impact': 'EXTREME',
+            'effect': 'Fed guidance can rapidly reprice rates, USD and crypto risk.',
+            'dt': datetime(2026, 9, 17, 0, 0, tzinfo=IST),
+            'source_type': 'scheduled',
+        },
+        {
+            'name': 'US Jobless Claims',
+            'impact': 'MEDIUM',
+            'effect': 'Weekly labour data can affect rate expectations and risk appetite.',
+            'dt': datetime(2026, 9, 17, 18, 0, tzinfo=IST),
+            'source_type': 'scheduled',
+        },
+        {
+            'name': 'US Employment Situation / NFP',
+            'impact': 'HIGH',
+            'effect': 'Payrolls and unemployment data can move USD, yields and crypto.',
+            'dt': datetime(2026, 10, 2, 18, 0, tzinfo=IST),
+            'source_type': 'scheduled',
+        },
+        {
+            'name': 'US CPI',
+            'impact': 'HIGH',
+            'effect': 'Inflation data can change rate expectations and crypto risk appetite.',
+            'dt': datetime(2026, 10, 14, 18, 0, tzinfo=IST),
+            'source_type': 'scheduled',
+        },
+        {
+            'name': 'US PPI',
+            'impact': 'HIGH',
+            'effect': 'Producer inflation can influence rate expectations and USD.',
+            'dt': datetime(2026, 10, 15, 18, 0, tzinfo=IST),
+            'source_type': 'scheduled',
+        },
+    ]
+
+
 def event_context(now_utc: datetime | None = None):
     now_utc = now_utc or datetime.now(UTC)
-    watchlist = [
-        {'name': 'FOMC / Fed communication', 'impact': 'EXTREME', 'effect': 'Can shift yields and USD; BTC/ETH volatility and volume can jump sharply.'},
-        {'name': 'US CPI / PPI / inflation', 'impact': 'HIGH', 'effect': 'Inflation surprise can change rate expectations and risk appetite.'},
-        {'name': 'US jobs / payrolls', 'impact': 'HIGH', 'effect': 'Employment surprise can reprice rates, USD and crypto risk.'},
-        {'name': 'ETF flows / regulatory headlines', 'impact': 'HIGH', 'effect': 'Can directly alter crypto demand, liquidity and sentiment.'},
-        {'name': 'Major exchange / protocol / security news', 'impact': 'HIGH', 'effect': 'Can create idiosyncratic BTC/ETH or sector-wide moves.'},
+    now = now_utc.astimezone(IST)
+
+    scheduled = [e for e in _scheduled_events_2026() if e['dt'] >= now]
+    scheduled.sort(key=lambda e: e['dt'])
+
+    upcoming = []
+    for e in scheduled[:6]:
+        dt = e['dt']
+        delta = (dt - now).total_seconds()
+        if delta <= 3600:
+            status = 'NEXT • <1H'
+        elif delta <= 86400:
+            status = 'NEXT • TODAY'
+        else:
+            status = 'UPCOMING'
+        upcoming.append({
+            'name': e['name'],
+            'impact': e['impact'],
+            'effect': e['effect'],
+            'date_ist': dt.strftime('%d %b %Y'),
+            'time_ist': dt.strftime('%I:%M %p IST').lstrip('0'),
+            'datetime_ist': dt.isoformat(),
+            'status': status,
+            'source_type': e['source_type'],
+        })
+
+    # Events without a fixed timestamp remain visible, but are never given a fake time.
+    variable = [
+        {'name': 'Bitcoin ETF flows / regulatory headlines', 'impact': 'HIGH',
+         'effect': 'Can directly alter crypto demand, liquidity and sentiment.',
+         'date_ist': 'Daily', 'time_ist': 'Time varies (IST)', 'datetime_ist': None,
+         'status': 'VARIABLE', 'source_type': 'variable'},
+        {'name': 'Major exchange / protocol / security news', 'impact': 'HIGH',
+         'effect': 'Can create idiosyncratic BTC/ETH or sector-wide moves.',
+         'date_ist': 'As published', 'time_ist': 'Time varies (IST)', 'datetime_ist': None,
+         'status': 'VARIABLE', 'source_type': 'variable'},
     ]
+
+    next_event = upcoming[0] if upcoming else (variable[0] if variable else None)
+    next_delta = None
+    if next_event and next_event.get('datetime_ist'):
+        next_delta = (datetime.fromisoformat(next_event['datetime_ist']) - now).total_seconds()
+
+    if next_delta is not None and next_delta <= 86400:
+        risk = 'EXTREME' if next_event['impact'] == 'EXTREME' else 'HIGH'
+    else:
+        risk = 'NORMAL'
+
+    watchlist = upcoming[:4] + variable[:1]
+
     return {
-        'risk': 'NORMAL',
-        'next_event': None,
-        'upcoming': [],
+        'risk': risk,
+        'next_event': next_event,
+        'upcoming': upcoming,
         'watchlist': watchlist,
-        'disclaimer': 'Live event timestamps require an official economic-calendar/news feed; the dashboard exposes the impact model until that feed is connected.'
+        'timezone': 'Asia/Kolkata',
+        'timezone_label': 'IST',
+        'disclaimer': 'Scheduled times are displayed in IST. Live surprise headlines and unscheduled events require a connected news/calendar feed.',
     }
