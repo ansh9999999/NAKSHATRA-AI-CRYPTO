@@ -131,192 +131,96 @@ def _astrology(dt):
 
 
 def _option_analysis(symbol, spot):
+    """Build a strict, expiry-specific option snapshot from Delta public data."""
     try:
         chain = get_option_chain(symbol)
     except Exception as exc:
-        return {"status": "ERROR", "signal": "NEUTRAL", "confidence": 0, "reason": str(exc), "rows": []}
+        return {"status": "ERROR", "signal": "NEUTRAL", "confidence": 0,
+                "reason": str(exc), "rows": []}
 
-    # Accept both the current mapping response and a legacy raw-list response.
     if isinstance(chain, list):
-        chain = {"status": "OK", "symbol": symbol, "rows": chain}
-    elif not isinstance(chain, dict):
-        chain = {"status": "ERROR", "symbol": symbol, "rows": [], "reason": "Invalid option-chain response"}
-    rows = chain.get("rows", []) or []
-    if not rows:
-        return {**chain, "score": 0, "signal": "NEUTRAL", "confidence": 0,
-                "pcr_oi": None, "pcr_volume": None, "atm": None, "support": None,
-                "resistance": None, "max_pain": None, "atm_chain": []}
+        chain = {"status": "OK" if chain else "NO_DATA", "rows": chain}
+    chain = chain if isinstance(chain, dict) else {"status": "NO_DATA", "rows": []}
+    rows = chain.get("rows") or []
+    if not isinstance(rows, list):
+        rows = []
 
-    # Normalize both the current CE/PE schema and legacy Delta field names.
-    normalized_rows = []
+    norm=[]
     for r in rows:
         if not isinstance(r, dict):
             continue
-        rr = dict(r)
-        ctype = str(rr.get("type") or rr.get("contract_type") or "").lower()
-        if ctype in ("call_options", "call", "ce"):
-            rr["type"] = "CE"
-        elif ctype in ("put_options", "put", "pe"):
-            rr["type"] = "PE"
-        strike = rr.get("strike")
-        if strike is None:
-            strike = rr.get("strike_price")
-        rr["strike"] = _num(strike, None) if strike is not None else None
-        if rr.get("ltp") is None:
-            rr["ltp"] = rr.get("close") or rr.get("mark_price")
-        normalized_rows.append(rr)
-
-    rows = normalized_rows
-    calls = [r for r in rows if r.get("type") == "CE"]
-    puts = [r for r in rows if r.get("type") == "PE"]
-    strikes = sorted({r["strike"] for r in rows if r.get("strike") is not None})
+        typ=str(r.get("type") or r.get("contract_type") or "").lower()
+        typ="CE" if typ in ("ce","call","call_options") else "PE" if typ in ("pe","put","put_options") else ""
+        try: strike=float(r.get("strike", r.get("strike_price")))
+        except Exception: continue
+        oi=_num(r.get("oi")); vol=_num(r.get("volume"))
+        ltp=r.get("ltp", r.get("close", r.get("mark_price")))
+        norm.append({**r,"type":typ,"strike":strike,"oi":oi,"volume":vol,"ltp":ltp})
+    norm=[r for r in norm if r["type"] in ("CE","PE")]
+    calls=[r for r in norm if r["type"]=="CE"]
+    puts=[r for r in norm if r["type"]=="PE"]
+    strikes=sorted({r["strike"] for r in norm})
     if not calls or not puts or not strikes:
-        return {**chain, "score": 0, "signal": "NEUTRAL", "confidence": 0,
-                "pcr_oi": None, "pcr_volume": None, "atm": None, "support": None,
-                "resistance": None, "max_pain": None, "atm_chain": []}
+        return {**chain,"status":chain.get("status","NO_DATA"),"score":0,"signal":"NEUTRAL","confidence":0,
+                "pcr_oi":None,"pcr_volume":None,"atm":None,"support":None,"resistance":None,
+                "max_pain":None,"call_oi":0,"put_oi":0,"atm_chain":[],"top_call_oi":[],"top_put_oi":[],
+                "data_quality":"INSUFFICIENT"}
 
-    atm = min(strikes, key=lambda x: abs(x - spot))
-    call_oi = sum(_num(r.get("oi")) for r in calls)
-    put_oi = sum(_num(r.get("oi")) for r in puts)
-    call_vol = sum(_num(r.get("volume")) for r in calls)
-    put_vol = sum(_num(r.get("volume")) for r in puts)
-    pcr = put_oi / call_oi if call_oi else None
-    vpcr = put_vol / call_vol if call_vol else None
-    # OI-based levels must be directionally meaningful around spot.
-    # Support = strongest PE OI at/below spot.
-    # Resistance = strongest CE OI at/above spot.
-    # This avoids the old bug where both could resolve to the same strike
-    # simply because that strike had the largest absolute OI.
-    put_support_candidates = [r for r in puts if r["strike"] <= spot]
-    call_resistance_candidates = [r for r in calls if r["strike"] >= spot]
-    support = (max(put_support_candidates, key=lambda r: _num(r.get("oi")))["strike"]
-               if put_support_candidates else
-               (max(puts, key=lambda r: _num(r.get("oi")))["strike"] if puts else None))
-    resistance = (max(call_resistance_candidates, key=lambda r: _num(r.get("oi")))["strike"]
-                  if call_resistance_candidates else
-                  (max(calls, key=lambda r: _num(r.get("oi")))["strike"] if calls else None))
+    atm=min(strikes,key=lambda k:abs(k-spot))
+    call_oi=sum(r["oi"] for r in calls); put_oi=sum(r["oi"] for r in puts)
+    call_vol=sum(r["volume"] for r in calls); put_vol=sum(r["volume"] for r in puts)
+    pcr=put_oi/call_oi if call_oi else None
+    vpcr=put_vol/call_vol if call_vol else None
 
-    max_pain = None
-    min_pain = None
+    # Structural levels: use the largest OI on the appropriate side of spot,
+    # rather than blindly taking the global max across all strikes.
+    put_candidates=[r for r in puts if r["strike"]<=atm]
+    call_candidates=[r for r in calls if r["strike"]>=atm]
+    support=max(put_candidates,key=lambda r:r["oi"])["strike"] if put_candidates else max(puts,key=lambda r:r["oi"])["strike"]
+    resistance=max(call_candidates,key=lambda r:r["oi"])["strike"] if call_candidates else max(calls,key=lambda r:r["oi"])["strike"]
+
+    # Standard max-pain calculation for this single expiry.
+    max_pain=None; min_pain=None
     for k in strikes:
-        pain = sum(max(k - r["strike"], 0) * _num(r.get("oi")) for r in calls)
-        pain += sum(max(r["strike"] - k, 0) * _num(r.get("oi")) for r in puts)
-        if min_pain is None or pain < min_pain:
-            min_pain, max_pain = pain, k
+        pain=0.0
+        for r in calls: pain += max(k-r["strike"],0.0)*r["oi"]
+        for r in puts: pain += max(r["strike"]-k,0.0)*r["oi"]
+        if min_pain is None or pain<min_pain:
+            min_pain=pain; max_pain=k
 
-    # --------------------------------------------------------------
-    # OPTION-CHAIN AI / POSITIONING ENGINE
-    # --------------------------------------------------------------
-    # This is a deterministic market-structure model, not a claim of
-    # machine-learning prediction. It combines PCR, near-ATM OI walls,
-    # max-pain displacement and volume PCR. Missing/weak data reduces
-    # confidence rather than inventing a directional signal.
-    score = 0.0
-    reasons = []
-
+    score=0; reasons=[]
     if pcr is not None:
-        if pcr >= 1.35:
-            score += 25; reasons.append(f"PCR {pcr:.2f} shows put-OI dominance")
-        elif pcr >= 1.15:
-            score += 15; reasons.append(f"PCR {pcr:.2f} is moderately bullish")
-        elif pcr <= 0.70:
-            score -= 25; reasons.append(f"PCR {pcr:.2f} shows call-OI dominance")
-        elif pcr <= 0.85:
-            score -= 15; reasons.append(f"PCR {pcr:.2f} is moderately bearish")
-        else:
-            reasons.append(f"PCR {pcr:.2f} is neutral")
-
-    # OI walls in a local band around spot. A put wall below spot acts
-    # as support; a call wall above spot acts as resistance.
-    local_puts = [r for r in puts if r["strike"] <= spot]
-    local_calls = [r for r in calls if r["strike"] >= spot]
-    put_wall = max(local_puts, key=lambda r: _num(r.get("oi")), default=None)
-    call_wall = max(local_calls, key=lambda r: _num(r.get("oi")), default=None)
-    put_wall_oi = _num(put_wall.get("oi")) if put_wall else 0.0
-    call_wall_oi = _num(call_wall.get("oi")) if call_wall else 0.0
-    if put_wall and call_wall and (put_wall_oi + call_wall_oi) > 0:
-        wall_delta = (put_wall_oi - call_wall_oi) / max(put_wall_oi + call_wall_oi, 1e-9)
-        score += max(-15, min(15, wall_delta * 30))
-        if put_wall_oi > call_wall_oi * 1.15:
-            reasons.append(f"Put OI wall {put_wall['strike']:,.0f} stronger than call wall")
-        elif call_wall_oi > put_wall_oi * 1.15:
-            reasons.append(f"Call OI wall {call_wall['strike']:,.0f} stronger than put wall")
-        else:
-            reasons.append("Call/put OI walls are balanced")
-
+        if pcr>=1.20: score+=25; reasons.append(f"PCR {pcr:.2f} — put OI dominates")
+        elif pcr>=1.00: score+=10; reasons.append(f"PCR {pcr:.2f} — mildly put-heavy")
+        elif pcr<=0.75: score-=25; reasons.append(f"PCR {pcr:.2f} — call OI dominates")
+        else: score-=10; reasons.append(f"PCR {pcr:.2f} — mildly call-heavy")
     if vpcr is not None:
-        if vpcr >= 1.20:
-            score += 10; reasons.append("Option volume favors puts")
-        elif vpcr <= 0.80:
-            score -= 10; reasons.append("Option volume favors calls")
+        if vpcr>=1.10: score+=10; reasons.append("Volume PCR supports puts")
+        elif vpcr<=0.80: score-=10; reasons.append("Volume PCR supports calls")
+    score=max(-35,min(35,score))
+    signal="BUY" if score>=20 else "SELL" if score<=-20 else "NEUTRAL"
+    confidence=int(round(abs(score)/35*100))
 
-    if max_pain is not None and spot:
-        displacement = (max_pain - spot) / spot
-        if displacement > 0.015:
-            score += 8; reasons.append("Max pain is above spot")
-        elif displacement < -0.015:
-            score -= 8; reasons.append("Max pain is below spot")
-
-    score = int(round(max(-35, min(35, score))))
-    signal = "BUY" if score >= 18 else "SELL" if score <= -18 else "NEUTRAL"
-    confidence = int(round(min(100, abs(score) / 35 * 100)))
-    option_bias = "BULLISH" if score >= 12 else "BEARISH" if score <= -12 else "NEUTRAL"
-    positioning = (
-        "PUT OI DOMINANCE" if pcr is not None and pcr >= 1.15 else
-        "CALL OI DOMINANCE" if pcr is not None and pcr <= 0.85 else
-        "BALANCED POSITIONING"
-    )
-    option_ai_summary = (
-        f"Options AI: {option_bias} ({confidence}/100). {positioning}. "
-        f"Key levels: support {support:,.0f} / resistance {resistance:,.0f}."
-        if support is not None and resistance is not None
-        else f"Options AI: {option_bias} ({confidence}/100). Positioning: {positioning}."
-    )
-
-    nearby = sorted(strikes, key=lambda x: abs(x - atm))[:11]
-    atm_chain = []
+    nearby=sorted(strikes,key=lambda k:abs(k-atm))[:9]
+    atm_chain=[]
     for k in sorted(nearby):
-        ce = next((r for r in calls if r["strike"] == k), None)
-        pe = next((r for r in puts if r["strike"] == k), None)
-        atm_chain.append({
-            "strike": k, "atm": k == atm,
-            "call_ltp": ce and ce.get("ltp"), "call_oi": ce and ce.get("oi"),
-            "call_volume": ce and ce.get("volume"), "put_ltp": pe and pe.get("ltp"),
-            "put_oi": pe and pe.get("oi"), "put_volume": pe and pe.get("volume"),
-        })
+        ce=next((r for r in calls if r["strike"]==k),None)
+        pe=next((r for r in puts if r["strike"]==k),None)
+        atm_chain.append({"strike":k,"atm":k==atm,
+            "call_ltp":ce.get("ltp") if ce else None,"call_oi":ce.get("oi") if ce else None,
+            "call_volume":ce.get("volume") if ce else None,"put_ltp":pe.get("ltp") if pe else None,
+            "put_oi":pe.get("oi") if pe else None,"put_volume":pe.get("volume") if pe else None})
 
-    return {
-        **chain, "score": score, "signal": signal, "confidence": confidence,
-        "reason": " • ".join(reasons[:4]) or "Live Delta option-chain data",
-        "pcr_oi": round(pcr, 3) if pcr is not None else None,
-        "pcr_volume": round(vpcr, 3) if vpcr is not None else None,
-        "atm": atm, "support": support, "resistance": resistance, "max_pain": max_pain,
-        "option_ai_bias": option_bias,
-        "option_ai_signal": signal,
-        "option_ai_confidence": confidence,
-        "option_ai_score": score,
-        "option_ai_positioning": positioning,
-        "option_ai_summary": option_ai_summary,
-        "option_ai_reasons": reasons[:6],
-        "put_wall": put_wall["strike"] if put_wall else None,
-        "put_wall_oi": round(put_wall_oi, 3),
-        "call_wall": call_wall["strike"] if call_wall else None,
-        "call_wall_oi": round(call_wall_oi, 3),
-        # Delta `oi` is open interest in contracts. Keep contract OI
-        # separate from `oi_value`, which is the notional/base-currency value.
-        "oi_unit": "contracts",
-        "call_oi": round(call_oi, 3), "put_oi": round(put_oi, 3),
-        "call_oi_contracts": round(call_oi, 3),
-        "put_oi_contracts": round(put_oi, 3),
-        "call_oi_value": round(sum(_num(r.get("oi_value")) for r in calls), 3),
-        "put_oi_value": round(sum(_num(r.get("oi_value")) for r in puts), 3),
-        "oi_value_symbol": next((str(r.get("oi_value_symbol")) for r in rows if r.get("oi_value_symbol")), "USD"),
-        "call_volume": round(call_vol, 3), "put_volume": round(put_vol, 3),
-        "atm_chain": atm_chain,
-        "top_call_oi": [{"strike": r["strike"], "oi": r.get("oi", 0)} for r in sorted(calls, key=lambda r: _num(r.get("oi")), reverse=True)[:5]],
-        "top_put_oi": [{"strike": r["strike"], "oi": r.get("oi", 0)} for r in sorted(puts, key=lambda r: _num(r.get("oi")), reverse=True)[:5]],
-    }
-
+    return {**chain,"status":"OK","score":score,"signal":signal,"confidence":confidence,
+            "reason":" • ".join(reasons[:4]) or "Live Delta option-chain data",
+            "pcr_oi":round(pcr,3) if pcr is not None else None,
+            "pcr_volume":round(vpcr,3) if vpcr is not None else None,
+            "atm":atm,"support":support,"resistance":resistance,"max_pain":max_pain,
+            "call_oi":round(call_oi),"put_oi":round(put_oi),"call_volume":round(call_vol),"put_volume":round(put_vol),
+            "atm_chain":atm_chain,
+            "top_call_oi":[{"strike":r["strike"],"oi":r["oi"]} for r in sorted(calls,key=lambda r:r["oi"],reverse=True)[:5]],
+            "top_put_oi":[{"strike":r["strike"],"oi":r["oi"]} for r in sorted(puts,key=lambda r:r["oi"],reverse=True)[:5]],
+            "data_quality":"LIVE"}
 
 def _tf(symbol, resolution):
     df = get_history(symbol, resolution, 250)
@@ -420,106 +324,11 @@ def generate_signal(df=None, symbol="BTCUSD"):
     astrology = _astrology(_candle_datetime(df))
     numerology = _numerology(_candle_datetime(df), symbol)
 
-    # Final composite decision must be calculated before the trade plan.
-    # The previous version referenced `final` here before assigning it, which
-    # caused the scanner/runtime error: local variable 'final' is not associated with a value.
+    # Preserve the old technical + option score behavior, then expose the
+    # two additional modules for the comprehensive dashboard.
     final = max(-100, min(100, tech + option.get("score", 0)))
     rec = "BUY" if final >= 35 else "SELL" if final <= -35 else "WAIT"
     confidence = round(min(99, 50 + abs(final) * 0.5), 1)
-
-    # ------------------------------------------------------------
-    # ALWAYS BUILD A TRADE PLAN
-    # ------------------------------------------------------------
-    # Trade-plan levels must remain close to the live price. Option-chain
-    # walls are structural reference levels, not entry prices. Never use a
-    # distant call/put wall as the entry-zone boundary because that can
-    # produce nonsensical plans such as a 75.7k entry -> 82.4k range.
-    atr_plan = max(float(atr_value), price * 0.001)
-    option_support = option.get("support")
-    option_resistance = option.get("resistance")
-    try:
-        option_support = float(option_support) if option_support is not None else None
-    except (TypeError, ValueError):
-        option_support = None
-    try:
-        option_resistance = float(option_resistance) if option_resistance is not None else None
-    except (TypeError, ValueError):
-        option_resistance = None
-
-    plan_side = "BUY" if final > 0 else "SELL" if final < 0 else "WAIT"
-    entry_buffer = 0.25 * atr_plan
-    stop_buffer = 0.15 * atr_plan
-
-    if plan_side == "BUY":
-        # Entry is a tight pullback/near-market zone, never the distant
-        # option resistance. Prefer nearby option support when it is within
-        # 1.5 ATR of spot.
-        entry_low = price - entry_buffer
-        entry_high = price + 0.10 * atr_plan
-        stop = price - atr_plan
-        if option_support is not None and option_support < price:
-            candidate = option_support - stop_buffer
-            if price - candidate <= 1.5 * atr_plan:
-                stop = candidate
-        risk = max(price - stop, 0.25 * atr_plan)
-        targets = [price + 1.5 * risk, price + 2.0 * risk, price + 3.0 * risk]
-
-    elif plan_side == "SELL":
-        # Entry is a tight near-market zone, never the distant option
-        # resistance. Prefer nearby option resistance for the stop only when
-        # it is within 1.5 ATR of spot.
-        entry_low = price - 0.10 * atr_plan
-        entry_high = price + entry_buffer
-        stop = price + atr_plan
-        if option_resistance is not None and option_resistance > price:
-            candidate = option_resistance + stop_buffer
-            if candidate - price <= 1.5 * atr_plan:
-                stop = candidate
-        risk = max(stop - price, 0.25 * atr_plan)
-        targets = [price - 1.5 * risk, price - 2.0 * risk, price - 3.0 * risk]
-
-    else:
-        # WAIT: show confirmation levels but do not invent an entry, stop or
-        # target. Use nearby option walls when available; otherwise ATR.
-        buy_trigger = option_resistance if option_resistance and option_resistance > price and option_resistance - price <= 2.0 * atr_plan else price + 0.5 * atr_plan
-        sell_trigger = option_support if option_support and option_support < price and price - option_support <= 2.0 * atr_plan else price - 0.5 * atr_plan
-        entry_low = sell_trigger
-        entry_high = buy_trigger
-        stop = None
-        risk = None
-        targets = []
-
-    if plan_side in ("BUY", "SELL"):
-        reward2 = abs(targets[1] - price)
-        rr2 = round(reward2 / risk, 2) if risk > 0 else None
-        trade_plan = {
-            "status": "ACTIONABLE" if rec != "WAIT" else "CONDITIONAL",
-            "side": plan_side,
-            "entry_zone": f"{round(entry_low,2):,.2f} – {round(entry_high,2):,.2f}",
-            "stop_loss": round(stop, 2),
-            "target1": round(targets[0], 2),
-            "target2": round(targets[1], 2),
-            "target3": round(targets[2], 2),
-            "risk_reward": rr2,
-            "invalidation": round(stop, 2),
-            "note": "Derived from live price, ATR and nearby option-chain structure."
-        }
-    else:
-        trade_plan = {
-            "status": "WAITING_FOR_CONFIRMATION",
-            "side": "WAIT",
-            "entry_zone": f"SELL < {round(sell_trigger,2):,.2f}  |  BUY > {round(buy_trigger,2):,.2f}",
-            "stop_loss": None,
-            "target1": None,
-            "target2": None,
-            "target3": None,
-            "risk_reward": None,
-            "invalidation": None,
-            "note": "No directional trade until price confirms above resistance or below support."
-        }
-
-    # Preserve the old technical + option score behavior, then expose the
-    # two additional modules for the comprehensive dashboard.
 
     technical_bias = "BULLISH" if tech >= 20 else "BEARISH" if tech <= -20 else "NEUTRAL"
     bullish = sum([
@@ -535,6 +344,34 @@ def generate_signal(df=None, symbol="BTCUSD"):
     else: agreement = "MIXED"
 
     reasons += astrology.get("reasons", [])[:2] + numerology.get("reasons", [])[:1]
+
+    # Trade plan is derived from the live 5m price + ATR. It never uses a
+    # distant option resistance as the entry zone and never creates an
+    # actionable plan for WAIT.
+    risk_unit=max(1.20*atr_value, price*0.0025)
+    entry_half=max(0.15*atr_value, price*0.0005)
+    if rec == "BUY":
+        entry_low=price-entry_half; entry_high=price+entry_half
+        sl=price-risk_unit
+        t1=price+1.5*risk_unit; t2=price+2.5*risk_unit; t3=price+3.5*risk_unit
+        rr=round((t2-price)/risk_unit,2)
+        trade_plan={"status":"READY","side":"BUY","entry_low":round(entry_low,2),"entry_high":round(entry_high,2),
+                    "entry_zone":f"{entry_low:,.2f} – {entry_high:,.2f}","stop_loss":round(sl,2),
+                    "target1":round(t1,2),"target2":round(t2,2),"target3":round(t3,2),"risk_reward":f"1 : {rr}",
+                    "risk_points":round(risk_unit,2),"basis":"5m ATR + live price"}
+    elif rec == "SELL":
+        entry_low=price-entry_half; entry_high=price+entry_half
+        sl=price+risk_unit
+        t1=price-1.5*risk_unit; t2=price-2.5*risk_unit; t3=price-3.5*risk_unit
+        rr=round((price-t2)/risk_unit,2)
+        trade_plan={"status":"READY","side":"SELL","entry_low":round(entry_low,2),"entry_high":round(entry_high,2),
+                    "entry_zone":f"{entry_low:,.2f} – {entry_high:,.2f}","stop_loss":round(sl,2),
+                    "target1":round(t1,2),"target2":round(t2,2),"target3":round(t3,2),"risk_reward":f"1 : {rr}",
+                    "risk_points":round(risk_unit,2),"basis":"5m ATR + live price"}
+    else:
+        trade_plan={"status":"WAIT","side":"WAIT","entry_zone":None,"stop_loss":None,"target1":None,
+                    "target2":None,"target3":None,"risk_reward":None,"risk_points":round(risk_unit,2),
+                    "basis":"No actionable plan while final signal is WAIT"}
     return {
         "status": "OK", "symbol": symbol, "price": round(price, 2), "trend": trend(c),
         "signal": rec, "recommendation": rec, "confidence": confidence,
@@ -546,8 +383,8 @@ def generate_signal(df=None, symbol="BTCUSD"):
         "astrology": astrology, "numerology": numerology, "option_chain": option,
         "intraday_trend": _intraday(symbol),
         "intraday_intelligence": intraday_intelligence,
-        "trade_plan": trade_plan,
         "agreement": agreement,
         "agreement_detail": {"technical": technical_bias, "astrology": astrology["bias"], "numerology": numerology["bias"], "option_chain": option.get("signal", "NEUTRAL"), "final": agreement, "bullish": bullish, "bearish": bearish},
+        "trade_plan": trade_plan,
         "timestamp": _candle_datetime(df).isoformat(),
     }
