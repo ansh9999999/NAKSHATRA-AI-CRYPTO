@@ -8,7 +8,25 @@ function biasClass(v){const s=String(v||'').toUpperCase();return s.includes('BUL
 function selectSymbol(s){symbol=s.toUpperCase();document.querySelectorAll('.symbol').forEach(b=>b.classList.toggle('active',b.dataset.symbol===symbol));$('cryptoSearch').value='';$('searchResults').innerHTML='';load()}
 function normalizeRows(o){
  const raw=Array.isArray(o?.rows)?o.rows:(Array.isArray(o?.atm_chain)?o.atm_chain:[]);
- return raw.map(r=>({strike:num(r.strike??r.strike_price),ceLtp:num(r.call_ltp??r.ce_ltp??r.ce?.ltp),ceOi:num(r.call_oi??r.ce_oi??r.ce?.oi),peLtp:num(r.put_ltp??r.pe_ltp??r.pe?.ltp),peOi:num(r.put_oi??r.pe_oi??r.pe?.oi),ceDoi:num(r.call_oi_change??r.ce_oi_change??r.ce?.oi_change??r.delta_oi_call),peDoi:num(r.put_oi_change??r.pe_oi_change??r.pe?.oi_change??r.delta_oi_put),atm:Boolean(r.atm)})).filter(r=>r.strike!==null).sort((a,b)=>a.strike-b.strike);
+ const grouped=new Map();
+ for(const r of raw){
+   const strike=num(r.strike??r.strike_price); if(strike===null) continue;
+   const x=grouped.get(strike)||{strike,ceLtp:null,ceOi:null,peLtp:null,peOi:null,ceDoi:null,peDoi:null,atm:Boolean(r.atm)};
+   const typ=String(r.type??r.contract_type??'').toUpperCase();
+   const oi=num(r.oi??r.open_interest);
+   const ltp=num(r.ltp??r.close??r.mark_price);
+   const doi=num(r.oi_change??r.call_oi_change??r.put_oi_change??r.delta_oi);
+   if(typ.includes('CALL')||typ==='CE'||typ==='CALL_OPTIONS'){x.ceOi=oi;x.ceLtp=ltp;x.ceDoi=doi;}
+   else if(typ.includes('PUT')||typ==='PE'||typ==='PUT_OPTIONS'){x.peOi=oi;x.peLtp=ltp;x.peDoi=doi;}
+   else {
+     x.ceLtp=num(r.call_ltp??r.ce_ltp??r.ce?.ltp); x.ceOi=num(r.call_oi??r.ce_oi??r.ce?.oi);
+     x.peLtp=num(r.put_ltp??r.pe_ltp??r.pe?.ltp); x.peOi=num(r.put_oi??r.pe_oi??r.pe?.oi);
+     x.ceDoi=num(r.call_oi_change??r.ce_oi_change??r.ce?.oi_change??r.delta_oi_call);
+     x.peDoi=num(r.put_oi_change??r.pe_oi_change??r.pe?.oi_change??r.delta_oi_put);
+   }
+   grouped.set(strike,x);
+ }
+ return [...grouped.values()].sort((a,b)=>a.strike-b.strike);
 }
 function calcOption(o,spot){
  const rows=normalizeRows(o);if(!rows.length)return {rows:[],status:'NO_DATA',view:'SIDEWAYS'};
@@ -62,8 +80,21 @@ function render(a){
  set('agreeTechnical',ag.technical||'—');set('agreeOptions',ag.option_chain||'—');set('agreeAstrology',ag.astrology||'—');set('agreeNumerology',ag.numerology||'—');set('agreeFinal',ag.final||x.agreement||'—');
  $('status').textContent='● LIVE';$('dataState').textContent='● LIVE';$('updateStatus').textContent=`Updated ${new Date().toLocaleTimeString()}`;
 }
-async function loadDay(){try{const r=await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&resolution=1d&limit=3&_=${Date.now()}`,{cache:'no-store'});const d=await r.json();const rows=d.rows||d.history||[];if(rows.length>=2){const a=rows[rows.length-2],b=rows[rows.length-1];const prev=num(a.close),last=num(b.close);if(prev&&last){const ch=last-prev,p=ch/prev*100;set('dayChange',`${ch>=0?'▲':'▼'} ${fmt(ch)}`);set('dayChangePct',`${p>=0?'+':''}${fmt(p)}%`)}}}catch(e){set('dayChange','—');set('dayChangePct','1D data unavailable')}}
-async function load(){if(busy)return;busy=true;try{const r=await fetch(`/api/live?symbol=${encodeURIComponent(symbol)}&_=${Date.now()}`,{cache:'no-store'});const d=await r.json();if(d.status==='OK'){render(d);loadDay()}else{set('status','● DATA RISK');set('dataState','● DATA RISK');set('updateStatus',d.message||'Data unavailable')}}catch(e){set('status','● OFFLINE');set('dataState','● OFFLINE');set('updateStatus','Connection error')}finally{busy=false}}
+async function loadDay(ticker){
+  const direct=num(ticker?.change_24h??ticker?.ltp_change_24h);
+  if(direct!==null){
+    const px=num(ticker?.price); const delta=px!==null ? px*(direct/100) : null;
+    set('dayChange',delta!==null?`${direct>=0?'▲':'▼'} ${fmt(Math.abs(delta))}`:`${direct>=0?'▲':'▼'} ${fmt(Math.abs(direct))}`);
+    set('dayChangePct',`${direct>=0?'+':''}${fmt(direct)}%`); return;
+  }
+  try{
+    const r=await fetch(`/api/market-history?symbol=${encodeURIComponent(symbol)}&resolution=1d&limit=3&_=${Date.now()}`,{cache:'no-store'});
+    const d=await r.json(); const rows=d.rows||[];
+    if(rows.length>=2){const a=rows[rows.length-2],b=rows[rows.length-1];const prev=num(a.close),last=num(b.close);if(prev&&last){const ch=last-prev,p=ch/prev*100;set('dayChange',`${ch>=0?'▲':'▼'} ${fmt(Math.abs(ch))}`);set('dayChangePct',`${p>=0?'+':''}${fmt(p)}%`);return}}
+    set('dayChange','—');set('dayChangePct','1D data unavailable');
+  }catch(e){set('dayChange','—');set('dayChangePct','1D data unavailable')}
+}
+async function load(){if(busy)return;busy=true;try{const r=await fetch(`/api/live?symbol=${encodeURIComponent(symbol)}&_=${Date.now()}`,{cache:'no-store'});const d=await r.json();if(d.status==='OK'){render(d);loadDay(d.ticker||{})}else{set('status','● DATA RISK');set('dataState','● DATA RISK');set('updateStatus',d.message||'Data unavailable')}}catch(e){set('status','● OFFLINE');set('dataState','● OFFLINE');set('updateStatus','Connection error')}finally{busy=false}}
 async function scanner(){try{const r=await fetch('/api/scanner?_='+Date.now(),{cache:'no-store'});const d=await r.json();const arr=Array.isArray(d)?d:(d.markets||[]);$('scanner').innerHTML=arr.map(x=>`<div class="scanner-row"><b>${esc(x.symbol)}</b><span>${esc(x.signal||x.recommendation||'WAIT')}</span><small>${esc(x.strength??x.confidence??'—')}</small></div>`).join('')||'No scanner data'}catch(e){$('scanner').textContent='Scanner unavailable'}}
 async function trades(){try{const r=await fetch('/api/history?_='+Date.now(),{cache:'no-store'});const d=await r.json();const arr=Array.isArray(d)?d:(d.history||[]);$('trades').innerHTML=(arr||[]).slice(-8).reverse().map(x=>`<tr><td>${esc(x.symbol)}</td><td>${esc(x.side)}</td><td>${esc(fmt(x.entry))}</td><td>${esc(fmt(x.pnl))}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">No trades yet</td></tr>';$('equitySummary').textContent=arr?.length?`${arr.length} recorded trades`:'No recorded trades'}catch(e){$('equitySummary').textContent='Trade history unavailable'}}
 async function searchProducts(q){clearTimeout(productTimer);if(!q||q.length<1){$('searchResults').innerHTML='';return}productTimer=setTimeout(async()=>{try{const r=await fetch(`/api/products?q=${encodeURIComponent(q)}`);const d=await r.json();$('searchResults').innerHTML=(d.products||[]).slice(0,8).map(p=>`<button class="result-item" data-symbol="${esc(p.symbol)}"><b>${esc(p.symbol)}</b><small>${esc(p.description||p.contract_type||'Delta product')}</small></button>`).join('')||'<div class="empty-search">No live Delta crypto found</div>';document.querySelectorAll('.result-item').forEach(b=>b.onclick=()=>selectSymbol(b.dataset.symbol))}catch(e){$('searchResults').innerHTML='<div class="empty-search">Search unavailable</div>'}},120)}
