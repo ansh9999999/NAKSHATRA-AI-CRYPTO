@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from math import floor, sin, pi
+import requests
 
 from analysis.indicators import ema, rsi, macd, atr, trend
 from delta import get_option_chain
@@ -154,7 +155,13 @@ def _option_analysis(symbol, spot):
         try: strike=float(r.get("strike", r.get("strike_price")))
         except Exception: continue
         oi=_num(r.get("oi")); vol=_num(r.get("volume"))
-        ltp=r.get("ltp", r.get("close", r.get("mark_price")))
+        ltp = _num(r.get("ltp"), 0.0)
+        if ltp <= 0:
+            ltp = _num(r.get("mark_price"), 0.0)
+        if ltp <= 0:
+            bid = _num(r.get("best_bid"), 0.0); ask = _num(r.get("best_ask"), 0.0)
+            if bid > 0 and ask > 0:
+                ltp = (bid + ask) / 2.0
         norm.append({**r,"type":typ,"strike":strike,"oi":oi,"volume":vol,"ltp":ltp})
     norm=[r for r in norm if r["type"] in ("CE","PE")]
     calls=[r for r in norm if r["type"]=="CE"]
@@ -241,6 +248,43 @@ def _intraday(symbol):
     return {"overall": label, "score": score, "timeframes": frames}
 
 
+_SENTIMENT_CACHE = {"time": 0.0, "data": None}
+
+def _sentiment():
+    """Live public Fear & Greed feed; never invents social/news sentiment."""
+    import time
+    if _SENTIMENT_CACHE["data"] is not None and time.time() - _SENTIMENT_CACHE["time"] < 300:
+        return dict(_SENTIMENT_CACHE["data"])
+    out = {
+        "social_sentiment": "NOT CONNECTED",
+        "news_sentiment": "NOT CONNECTED",
+        "fear_greed": "UNAVAILABLE",
+        "score": None,
+        "source": "alternative.me",
+        "status": "NO_DATA",
+    }
+    try:
+        r = requests.get("https://api.alternative.me/fng/?limit=1&format=json", timeout=5)
+        r.raise_for_status()
+        data = r.json().get("data") or []
+        if data:
+            value = int(float(data[0].get("value", 0)))
+            label = str(data[0].get("value_classification", "Neutral"))
+            # Dashboard score is centered around zero for consistency.
+            score = round((value - 50) / 10, 1)
+            bias = "BULLISH" if value >= 55 else "BEARISH" if value <= 45 else "NEUTRAL"
+            out.update({
+                "bias": bias,
+                "fear_greed": f"{label} ({value})",
+                "score": score,
+                "status": "LIVE",
+            })
+    except Exception as exc:
+        out["reason"] = str(exc)
+    _SENTIMENT_CACHE.update({"time": time.time(), "data": dict(out)})
+    return out
+
+
 def generate_signal(df=None, symbol="BTCUSD"):
     symbol = symbol.upper()
     if df is None or df.empty:
@@ -323,6 +367,7 @@ def generate_signal(df=None, symbol="BTCUSD"):
     }
     astrology = _astrology(_candle_datetime(df))
     numerology = _numerology(_candle_datetime(df), symbol)
+    sentiment = _sentiment()
 
     # Preserve the old technical + option score behavior, then expose the
     # two additional modules for the comprehensive dashboard.
@@ -380,7 +425,7 @@ def generate_signal(df=None, symbol="BTCUSD"):
         "rsi": round(rv, 2), "macd": round(float(ml.iloc[-1]), 5), "macd_signal": round(float(ms.iloc[-1]), 5),
         "atr": round(float(atr(h, l, c).iloc[-1]), 2), "reasons": reasons,
         "technical": {"signal": technical_bias, "confidence": min(99, abs(tech)), "score": tech, "reasons": reasons[:8]},
-        "astrology": astrology, "numerology": numerology, "option_chain": option,
+        "astrology": astrology, "numerology": numerology, "sentiment": sentiment, "option_chain": option,
         "intraday_trend": _intraday(symbol),
         "intraday_intelligence": intraday_intelligence,
         "agreement": agreement,
