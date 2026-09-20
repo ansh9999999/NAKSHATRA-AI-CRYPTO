@@ -1,6 +1,3 @@
-import re
-from datetime import date, datetime
-
 """
 NAKSHATRA AI v4.0
 Delta Exchange India - Market Data Helper
@@ -124,12 +121,13 @@ def get_ticker(symbol="BTCUSD"):
             "price": _float(price),
             "mark_price": _float(result.get("mark_price", price)),
             "volume": _float(result.get("volume", 0)),
-            "volume_24h": _float(result.get("volume_24h", result.get("volume", 0))),
-            "change_24h": result.get("price_change_24h", result.get("change_24h", result.get("price_change"))),
-            "day_high": result.get("high", result.get("day_high")),
-            "day_low": result.get("low", result.get("day_low")),
-            "oi": result.get("oi"),
-            "open_interest": result.get("oi", result.get("open_interest")),
+            "open": _float(result.get("open", 0)),
+            "high": _float(result.get("high", 0)),
+            "low": _float(result.get("low", 0)),
+            "oi": _float(result.get("oi", 0)),
+            "change_24h": _float(result.get("ltp_change_24h", 0)),
+            "ltp_change_24h": _float(result.get("ltp_change_24h", 0)),
+            "timestamp": result.get("timestamp"),
         }
 
     except Exception as exc:
@@ -548,169 +546,131 @@ if __name__ == "__main__":
 
 
 # ==========================================================
-# DELTA OPTION CHAIN
+# PUBLIC OPTION CHAIN
 # ==========================================================
+def _option_expiry_from_symbol(sym):
+    import re
+    m = re.search(r"-(\d{6})$", str(sym or ""))
+    return m.group(1) if m else None
 
-def _option_expiry_from_symbol(symbol):
-    """Return DD-MM-YYYY from Delta option symbol C-BTC-90000-310126."""
-    text = str(symbol or "").strip().upper()
-    m = re.search(r"-(\d{6})$", text)
-    if not m:
+
+def _expiry_to_display(exp):
+    if not exp:
         return None
-    raw = m.group(1)
-    try:
-        day, month, year = int(raw[:2]), int(raw[2:4]), int(raw[4:6])
-        year += 2000
-        return f"{day:02d}-{month:02d}-{year:04d}"
-    except Exception:
-        return None
+    s = str(exp)
+    if len(s) == 6 and s.isdigit():
+        return f"{s[0:2]}-{s[2:4]}-20{s[4:6]}"
+    return s
 
 
 def get_option_chain(symbol="BTCUSD", expiry_date=None):
-    """
-    Fetch and normalize Delta's public option-chain tickers.
+    """Fetch the current/future public Delta option chain for one expiry.
 
-    IMPORTANT:
-    Delta's option-chain endpoint is public and does not require API-key
-    authentication.  The API returns rows using fields such as
-    contract_type/strike_price/close/oi.  The signal engine consumes a
-    normalized CE/PE schema, so this function performs that translation.
-
-    When no expiry is supplied, the endpoint is queried without an expiry
-    filter and the nearest expiry present in the returned option symbols is
-    selected. This avoids relying on the /products pagination order.
+    No authentication is required. Returns normalized rows for the signal engine.
     """
+    import re
+    from datetime import datetime
     symbol = str(symbol).upper().strip()
-    underlying = symbol
-    if underlying.endswith("USD"):
-        underlying = underlying[:-3]
-    elif underlying.endswith("_INR"):
-        underlying = underlying[:-4]
-    underlying = underlying.strip()
-    if not underlying:
-        return {"status": "ERROR", "symbol": symbol, "rows": [], "reason": "Invalid underlying"}
-
+    underlying = re.sub(r"USD$", "", symbol)
     try:
         params = {
             "contract_types": "call_options,put_options",
             "underlying_asset_symbols": underlying,
         }
         if expiry_date:
-            params["expiry_date"] = str(expiry_date)
-
-        r = session.get(
-            f"{BASE_URL}/tickers",
-            params=params,
-            timeout=TIMEOUT,
-        )
+            params["expiry_date"] = expiry_date
+        r = session.get(f"{BASE_URL}/tickers", params=params, timeout=TIMEOUT)
         r.raise_for_status()
-        payload = r.json() or {}
-        raw_rows = payload.get("result", []) or []
-        if not isinstance(raw_rows, list):
-            raw_rows = []
+        payload = r.json()
+        raw = payload.get("result") or []
+        if not isinstance(raw, list):
+            raw = []
 
-        normalized = []
-        for row in raw_rows:
-            if not isinstance(row, dict):
+        rows = []
+        expiries = []
+        for x in raw:
+            if not isinstance(x, dict):
                 continue
-            contract_type = str(row.get("contract_type") or "").lower()
-            option_symbol = str(row.get("symbol") or "").upper()
-            if contract_type not in ("call_options", "put_options"):
-                if option_symbol.startswith("C-"):
-                    contract_type = "call_options"
-                elif option_symbol.startswith("P-"):
-                    contract_type = "put_options"
-                else:
-                    continue
-
-            option_type = "CE" if contract_type == "call_options" else "PE"
-            strike = _float(row.get("strike_price"), 0.0)
-            if strike <= 0:
-                parts = option_symbol.split("-")
-                if len(parts) >= 4:
-                    strike = _float(parts[-2], 0.0)
-            if strike <= 0:
+            typ = str(x.get("contract_type", "")).lower()
+            if typ not in ("call_options", "put_options"):
                 continue
-
-            # Prefer the expiry encoded in the actual Delta option symbol.
-            # Some ticker payloads omit/return inconsistent expiry metadata.
-            symbol_expiry = _option_expiry_from_symbol(option_symbol)
-            expiry = symbol_expiry or row.get("expiry_date") or row.get("expiry")
-            ltp = _float(row.get("close"), 0.0)
-            if ltp <= 0:
-                ltp = _float(row.get("mark_price"), 0.0)
-
-            quotes = row.get("quotes") or {}
-            greeks = row.get("greeks") or {}
-            iv = quotes.get("ask_iv") or quotes.get("bid_iv") or row.get("mark_vol")
-
-            normalized.append({
-                "symbol": option_symbol,
-                "type": option_type,
-                "contract_type": contract_type,
+            strike = _float(x.get("strike_price"), None)
+            if strike is None:
+                continue
+            sym = x.get("symbol", "")
+            exp = x.get("expiry_date") or x.get("expiry")
+            if not exp:
+                code = _option_expiry_from_symbol(sym)
+                exp = _expiry_to_display(code)
+            if exp:
+                expiries.append(str(exp))
+            close = _float(x.get("close"), 0.0)
+            mark = _float(x.get("mark_price"), 0.0)
+            q = x.get("quotes") or {}
+            bid = _float(q.get("best_bid"), 0.0)
+            ask = _float(q.get("best_ask"), 0.0)
+            # Delta can return close=0 for an option with no recent trade.
+            # Prefer mark, then midpoint, so UI does not show fake zero LTP.
+            if close > 0:
+                ltp = close
+            elif mark > 0:
+                ltp = mark
+            elif bid > 0 and ask > 0:
+                ltp = (bid + ask) / 2.0
+            else:
+                ltp = 0.0
+            greeks = x.get("greeks") or {}
+            rows.append({
+                "symbol": sym,
+                "type": "CE" if typ == "call_options" else "PE",
+                "contract_type": typ,
                 "strike": strike,
                 "strike_price": strike,
-                "expiry": str(expiry) if expiry else None,
-                "expiry_date": str(expiry) if expiry else None,
+                "expiry": exp,
+                "expiry_date": exp,
                 "ltp": ltp,
-                "close": ltp,
-                "mark_price": _float(row.get("mark_price"), ltp),
-                "volume": _float(row.get("volume"), 0.0),
-                "oi": _float(row.get("oi"), 0.0),
-                "oi_value": _float(row.get("oi_value"), 0.0),
-                "spot_price": _float(row.get("spot_price"), 0.0),
-                "iv": _float(iv, 0.0),
+                "close": close,
+                "mark_price": mark,
+                "best_bid": bid,
+                "best_ask": ask,
+                "volume": _float(x.get("volume"), 0.0),
+                "oi": _float(x.get("oi"), 0.0),
+                "oi_value": _float(x.get("oi_value"), 0.0),
+                "oi_value_usd": _float(x.get("oi_value_usd"), 0.0),
+                "iv": _float(x.get("mark_iv"), 0.0),
                 "delta": _float(greeks.get("delta"), 0.0),
                 "gamma": _float(greeks.get("gamma"), 0.0),
                 "theta": _float(greeks.get("theta"), 0.0),
                 "vega": _float(greeks.get("vega"), 0.0),
+                "spot_price": _float(x.get("spot_price"), 0.0),
             })
 
-        # Select the nearest CURRENT/FUTURE expiry chronologically.
-        # Never sort DD-MM-YYYY as strings (that can incorrectly select
-        # 02-10-2026 before 19-09-2026).
-        def _expiry_date(value):
-            try:
-                return datetime.strptime(str(value), "%d-%m-%Y").date()
-            except Exception:
-                return None
-
-        if not expiry_date:
-            expiry_values = sorted({
-                r["expiry"] for r in normalized
-                if r.get("expiry") and _expiry_date(r.get("expiry"))
-            }, key=lambda v: _expiry_date(v))
-            today = date.today()
-            future = [v for v in expiry_values if _expiry_date(v) >= today]
-            if future:
-                expiry_date = future[0]
-            elif expiry_values:
-                expiry_date = expiry_values[0]
-            if expiry_date:
-                normalized = [r for r in normalized if r.get("expiry") == expiry_date]
-        else:
-            normalized = [r for r in normalized if not r.get("expiry") or str(r.get("expiry")) == str(expiry_date)]
-
-        normalized.sort(key=lambda r: (float(r.get("strike") or 0), r.get("type") or ""))
+        # If all expiries were returned, select the nearest future expiry.
+        if not expiry_date and rows:
+            parsed = []
+            for e in set(expiries):
+                try:
+                    parsed.append((datetime.strptime(e, "%d-%m-%Y"), e))
+                except Exception:
+                    pass
+            if parsed:
+                now = datetime.utcnow().date()
+                future = [(d, e) for d, e in parsed if d.date() >= now]
+                chosen = min(future or parsed)[1]
+                rows = [x for x in rows if x.get("expiry") == chosen]
+                expiry_date = chosen
+        elif expiry_date:
+            rows = [x for x in rows if str(x.get("expiry")) == str(expiry_date)] or rows
 
         return {
-            "status": "OK" if normalized else "NO_DATA",
+            "status": "OK" if rows else "NO_DATA",
             "symbol": symbol,
             "underlying": underlying,
-            "expiry": expiry_date,
-            "rows": normalized,
-            "count": len(normalized),
+            "expiry": expiry_date or (rows[0].get("expiry") if rows else None),
+            "rows": rows,
+            "count": len(rows),
             "source": "delta_public_option_tickers",
         }
-
     except Exception as exc:
         print(f"Delta option chain error [{symbol}]: {exc}")
-        return {
-            "status": "ERROR",
-            "symbol": symbol,
-            "underlying": underlying,
-            "expiry": expiry_date,
-            "rows": [],
-            "count": 0,
-            "reason": str(exc),
-        }
+        return {"status": "ERROR", "symbol": symbol, "rows": [], "count": 0, "message": str(exc)}
