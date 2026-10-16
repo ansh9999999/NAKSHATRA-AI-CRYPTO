@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>NAKSHATRA AI v4.0</title>
-<link rel="stylesheet" href="/static/style.css?v=5.6.0">
+<link rel="stylesheet" href="/static/style.css?v=5.7.0">
 </head>
 <body><div class="container">
 <header class="topbar">
@@ -49,5 +49,22 @@
 <section class="card compact"><h2>Equity Curve</h2><div id="equitySummary" class="equity-summary">Loading trade history…</div></section>
 </aside>
 </main>
+<section class="global-market-wrap" id="globalMarketSection">
+  <div class="global-title-row"><div><span class="eyebrow">GLOBAL DATA • PUBLIC EXCHANGE TICKERS</span><h2>🌐 Global Exchange & Sudden-Move Monitor</h2><p>Cross-exchange confirmation, unusual 24h movement and derivatives context. Delta trading feed remains unchanged.</p></div><button id="globalRefreshBtn" class="global-refresh">↻ Refresh global data</button></div>
+  <div class="global-grid">
+    <section class="global-card global-alert-card"><div class="global-card-head"><h3>⚡ Pump / Dump Early Warning</h3><span id="gmAlertLevel" class="gm-pill sideways">Checking…</span></div><strong id="gmAlertTitle" class="gm-alert-title">Loading exchange data…</strong><div id="gmAlertReasons" class="gm-reasons">Fetching public tickers from supported exchanges.</div><small id="gmAlertMethod" class="gm-note">Not a guaranteed prediction.</small></section>
+    <section class="global-card"><div class="global-card-head"><h3>🌍 Global Market Consensus</h3><span id="gmConsensus" class="gm-signal sideways">—</span></div><div class="gm-kpis"><div><small>Mean BTC Price</small><b id="gmMeanPrice">—</b></div><div><small>Median 24h Change</small><b id="gmMedianChange">—</b></div><div><small>Exchange Agreement</small><b id="gmAgreement">—</b></div><div><small>Providers Online</small><b id="gmProviders">—</b></div></div></section>
+  </div>
+  <section class="global-card"><div class="global-card-head"><h3>🏦 Global Exchange Monitor</h3><small id="gmUpdated">Waiting for data…</small></div><div class="gm-table-wrap"><table class="gm-table"><thead><tr><th>Exchange</th><th>Market</th><th>BTC Price (USD)</th><th>24h Change</th><th>24h Volume</th><th>Status</th></tr></thead><tbody id="gmExchangeRows"><tr><td colspan="6">Loading public exchange tickers…</td></tr></tbody></table></div></section>
+  <div class="global-grid">
+    <section class="global-card"><div class="global-card-head"><h3>🧠 Smart Money / Derivatives Snapshot</h3><span class="gm-pill sideways">Partial feeds</span></div><div class="gm-kpis"><div><small>Open Interest</small><b id="gmOpenInterest">Not available</b></div><div><small>Funding Rate</small><b id="gmFunding">Not available</b></div><div><small>Order-Book Imbalance</small><b id="gmBookImbalance">Not connected</b></div><div><small>Data Source</small><b id="gmDerivSource">—</b></div></div><p id="gmSmartNote" class="gm-note">Only metrics returned by a public provider will be shown.</p></section>
+    <section class="global-card"><div class="global-card-head"><h3>↔ Cross-Exchange Divergence</h3><span class="gm-pill sideways">Price spread</span></div><div id="gmDivergences" class="gm-divergences">Waiting for comparable prices…</div><p class="gm-note">Divergence is relative to the mean of available prices, not proof of manipulation.</p></section>
+  </div>
+  <div class="global-grid">
+    <section class="global-card"><div class="global-card-head"><h3>💥 Liquidation & Squeeze Risk</h3><span id="gmLiqStatus" class="gm-pill sideways">Unconfirmed</span></div><strong id="gmSqueeze" class="gm-alert-title">No liquidation feed connected</strong><p id="gmLiqNote" class="gm-note">This section will not guess long/short squeeze risk without a reliable liquidation stream.</p></section>
+    <section class="global-card"><div class="global-card-head"><h3>🎯 AI Sudden-Move Probability</h3><span id="gmProbabilityStatus" class="gm-pill sideways">Not calibrated</span></div><div class="gm-probability"><div><small>Upward probability</small><b id="gmUpProbability">Not published</b></div><div><small>Downward probability</small><b id="gmDownProbability">Not published</b></div></div><p id="gmProbabilityNote" class="gm-note">Probabilities remain hidden until a historical backtest calibrates them; no fabricated confidence score.</p></section>
+  </div>
+  <div class="global-footnote">Global monitor is read-only and separate from Delta trading logic. Exchange endpoints can be rate-limited or region-blocked; unavailable sources are shown explicitly. Current warning uses 24h ticker thresholds, not second-by-second prediction.</div>
+</section>
 <footer><span>NAKSHATRA AI v4.0 • Market data from Delta Exchange</span><span>Auto refresh 10s</span></footer>
-</div><script src="/static/app.js?v=5.6.0"></script></body></html>
+</div><script src="/static/app.js?v=5.7.0"></script><link rel="stylesheet" href="/static/global-market.css?v=1.0.0"><script src="/static/global-market.js?v=1.0.0"></script></body></html>
