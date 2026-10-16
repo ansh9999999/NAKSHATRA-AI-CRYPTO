@@ -7,6 +7,8 @@
   const bias = v => { const s=String(v||'').toUpperCase(); if(s.includes('BULL')||s.includes('ABOVE'))return 'bull'; if(s.includes('BEAR')||s.includes('BELOW'))return 'bear'; if(s.includes('SIDE')||s.includes('NEUTRAL')||s.includes('NORMAL')||s.includes('LIMITED')||s.includes('UNCONFIRMED')||s.includes('NOT CALIBRATED'))return 'sideways'; return ''; };
   function text(id, value, cls) { const el=$(id); if(!el)return; el.textContent=value ?? '—'; if(cls!==undefined){el.classList.remove('bull','bear','sideways');const c=bias(cls);if(c)el.classList.add(c);} }
   function render(d){
+    const asset=(d.base_asset || (String(d.symbol||'BTCUSDT').startsWith('ETH')?'ETH':'BTC'));
+    document.querySelectorAll('[data-global-asset-label]').forEach(el=>{el.textContent=asset;});
     const w=d.early_warning||{}, sm=d.smart_money||{}, liq=d.liquidation_risk||{}, prob=d.probability||{};
     text('gmAlertLevel',w.level||'—',w.level); text('gmAlertTitle',w.title||'No alert data',w.direction); text('gmAlertMethod',w.method||'');
     $('gmAlertReasons').innerHTML=`<ul>${(w.reasons||[]).map(x=>`<li>${esc(x)}</li>`).join('')||'<li>No reasons returned.</li>'}</ul>`;
@@ -26,7 +28,11 @@
     text('gmLiqStatus',liq.status||'UNCONFIRMED',liq.status); text('gmSqueeze',liq.long_short_squeeze||'UNCONFIRMED'); text('gmLiqNote',liq.note||'');
     text('gmProbabilityStatus',prob.status||'NOT CALIBRATED',prob.status); text('gmUpProbability',prob.up_pct===null?'Not published':`${fmt(prob.up_pct,1)}%`); text('gmDownProbability',prob.down_pct===null?'Not published':`${fmt(prob.down_pct,1)}%`); text('gmProbabilityNote',prob.note||'');
   }
-  let busy=false;
-  async function load(force=false){if(busy)return;busy=true;const b=$('globalRefreshBtn');if(b){b.disabled=true;b.textContent='Refreshing…';}try{const r=await fetch(`/api/global-market/snapshot${force?'?force=true':''}`,{cache:'no-store'});if(!r.ok)throw new Error(`HTTP ${r.status}`);render(await r.json());}catch(e){text('gmAlertTitle','Global exchange data temporarily unavailable');text('gmAlertReasons',String(e.message||e));text('gmAlertLevel','OFFLINE','SIDEWAYS');}finally{busy=false;if(b){b.disabled=false;b.textContent='↻ Refresh global data';}}}
-  document.addEventListener('DOMContentLoaded',()=>{if(!$('globalMarketSection'))return;const b=$('globalRefreshBtn');if(b)b.addEventListener('click',()=>load(true));load();window.setInterval(()=>load(false),15000);});
+  let busy=false, pendingRefresh=false;
+  function normalizeAsset(raw){const s=String(raw||'BTCUSD').toUpperCase().replace(/[\/-]/g,'');return s.startsWith('ETH')?'ETHUSDT':s.startsWith('BTC')?'BTCUSDT':s;}
+  let currentAsset=normalizeAsset(document.querySelector('.symbol.active')?.dataset.symbol||'BTCUSD');
+  function selectedAsset(){return currentAsset;}
+  async function load(force=false){if(busy){pendingRefresh=true;return;}busy=true;const b=$('globalRefreshBtn');if(b){b.disabled=true;b.textContent='Refreshing…';}try{const symbol=selectedAsset();const params=new URLSearchParams({symbol});if(force)params.set('force','true');const r=await fetch(`/api/global-market/snapshot?${params.toString()}`,{cache:'no-store'});if(!r.ok)throw new Error(`HTTP ${r.status}`);const data=await r.json();if(symbol===selectedAsset()&&normalizeAsset(data.symbol)===symbol)render(data);else if(symbol===selectedAsset()){throw new Error('Provider response symbol mismatch; stale data was not displayed.');}}catch(e){if(!busy||selectedAsset()){text('gmAlertTitle','Global exchange data temporarily unavailable');text('gmAlertReasons',String(e.message||e));text('gmAlertLevel','OFFLINE','SIDEWAYS');}}finally{busy=false;if(b){b.disabled=false;b.textContent='↻ Refresh global data';}if(pendingRefresh){pendingRefresh=false;load(true);}}}
+  window.addEventListener('nakshatra:symbol-changed',e=>{currentAsset=normalizeAsset(e.detail?.symbol);load(true);});
+  document.addEventListener('DOMContentLoaded',()=>{if(!$('globalMarketSection'))return;const b=$('globalRefreshBtn');if(b)b.addEventListener('click',()=>load(true));load(true);window.setInterval(()=>load(false),15000);});
 })();
