@@ -2,3 +2,101 @@
 *{box-sizing:border-box}html,body{margin:0;background:radial-gradient(circle at 50% -10%,#0a2440 0,#020914 48%,#01050c 100%);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px}body{min-height:100vh}.container{width:min(1180px,100%);margin:auto;padding:14px}.topbar{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:10px 4px 14px}.brand{display:flex;align-items:center;gap:10px}.brand-icon{font-size:30px;color:#d35cff}.topbar h1{margin:0;font-size:24px;letter-spacing:.2px}.topbar h1 em{font-style:normal;color:var(--cyan)}.subline{color:#b5c7dc;font-size:12px;margin-top:3px}.top-actions{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px}.live-pill{color:var(--green);font-weight:900;background:#063321;border:1px solid #0a7148;border-radius:999px;padding:6px 10px}.refresh{border:1px solid #1a4b76;background:#061528;color:#dcecff;border-radius:10px;font-size:22px;width:40px;height:36px}.selector{display:flex;gap:10px;margin-bottom:10px}.quick{display:flex;gap:8px}.symbol{min-width:145px;border:1px solid #1a5688;background:#07182b;color:#dbe9fa;border-radius:10px;padding:11px 15px;font-size:15px}.symbol.active{border-color:var(--cyan);box-shadow:0 0 12px #079eff22;background:#0a2742}.search-wrap{position:relative;flex:1;display:flex;align-items:center;border:1px solid #173a60;background:#061426;border-radius:10px;padding:0 10px}.search-wrap input{width:100%;border:0;outline:0;background:transparent;color:#fff;padding:11px;font-size:14px}.search-results{position:absolute;left:0;right:0;top:45px;background:#071426;border:1px solid #1b4c76;border-radius:10px;z-index:20;overflow:hidden}.search-results div{padding:10px;border-bottom:1px solid #102b46}.card{background:linear-gradient(145deg,#07172a,#04101e);border:1px solid var(--line);border-radius:14px;padding:13px;margin-bottom:10px;box-shadow:0 7px 24px #0005}.section-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.card h2{margin:0 0 9px;font-size:16px}.card h2 small{font-size:11px;color:var(--muted)}.eyebrow,small{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.55px}.hero-grid-main{display:grid;grid-template-columns:1.35fr .9fr;gap:10px}.market-hero{border-color:#138b65}.market-hero h2{font-size:19px;margin:2px 0}.price-line{display:flex;justify-content:space-between;align-items:center;gap:15px}.price{font-size:44px;font-weight:900;letter-spacing:-1px;margin:4px 0}.change{color:var(--red);font-weight:800;font-size:15px}.day-change{min-width:190px;background:#071b2e;border:1px solid #145184;border-radius:11px;padding:12px}.day-change b{display:block;color:var(--red);font-size:19px;margin:4px 0}.day-change span{color:var(--red);font-weight:800}.market-row,.plan-grid,.metrics,.option-overview{display:grid;gap:7px}.market-row{grid-template-columns:repeat(4,1fr);margin-top:10px}.market-row>div,.plan-grid>div,.metrics>div,.option-overview>div{background:#061426;border:1px solid #102e4c;border-radius:9px;padding:9px}.market-row b,.plan-grid b,.metrics b,.option-overview b{display:block;margin-top:4px;font-size:14px;color:#edf6ff}.decision-card{border-color:#7c2cb0;background:linear-gradient(145deg,#140b24,#071426)}.decision-card h2{color:#cf55ff}.decision-card>strong{display:block;font-size:42px;line-height:1.05;color:var(--red);margin:12px 0 5px}.decision-card>span{font-size:15px;color:#d8c8ee}.confidence-bar{height:10px;background:#102b45;border-radius:999px;margin-top:10px;overflow:hidden}.confidence-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ff2c72,#ff4f9a);border-radius:999px}.tf-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.tf-strip>div{background:#061426;border:1px solid #113653;border-radius:9px;padding:9px 11px}.tf-strip b{display:block;margin-top:4px;font-size:14px}.split-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.triple-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.metrics{grid-template-columns:repeat(2,1fr)}.metrics>div{min-height:52px}.metrics b{font-size:15px}.trend-list{display:grid;gap:2px}.trend-list div{display:flex;justify-content:space-between;padding:7px 4px;border-bottom:1px solid #ffffff0a}.trend-list b{font-size:13px}.mini-meta{display:flex;justify-content:space-between;margin-top:8px;color:var(--muted)}.mini-meta b{color:#eaf4ff}.trade-plan{border-color:#275e88}.trade-plan .section-head span{color:var(--amber);font-weight:900}.plan-grid{grid-template-columns:repeat(3,1fr)}.plan-grid>div:first-child{grid-column:span 3}.plan-grid b{font-size:15px}.analysis-rows>div,.factor-list>div{display:flex;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px solid #ffffff0a}.analysis-rows span,.factor-list span{color:#b4c6d9;font-size:13px}.analysis-rows b,.factor-list b{text-align:right;color:#f4f8ff;font-size:13px}.option-card{border-color:#7630a7}.option-head-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;color:#b4c6d9;font-size:11px}.option-head-right span:first-child{color:var(--green);font-weight:900}.option-overview{grid-template-columns:repeat(6,1fr);margin-bottom:9px}.option-overview>div{min-height:61px}.option-view{grid-column:span 2;border-color:#1b7b6a!important;background:#061b20!important}.option-view b{color:var(--green);font-size:16px}.option-view span{display:block;color:#b6c8d8;font-size:10px;margin-top:3px}.top5-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.top5{border-radius:10px;overflow:hidden;border:1px solid}.top5.calls{border-color:#bd2859}.top5.puts{border-color:#16a873}.top5 h3{margin:0;padding:9px 10px;font-size:13px}.calls h3{background:#28101c;color:#ff5a8c}.puts h3{background:#09261d;color:#28edaa}.top5 h3 span{font-weight:500;color:#b8c8d8}.top5 table{margin:0}.top5 th,.top5 td{padding:7px 6px;font-size:11px}.top5 td:nth-child(n+3){font-weight:700}.top5.calls td:last-child,.top5.puts td:last-child{color:var(--green)}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #12304c;text-align:right;white-space:nowrap;padding:7px 6px}th:first-child,td:first-child{text-align:left}th{color:#a9bfd6;font-size:10px;text-transform:uppercase}td{font-size:12px}.catalyst{display:grid;gap:7px}.catalyst-row{display:flex;justify-content:space-between;gap:12px;padding:10px;background:#061426;border:1px solid #153653;border-radius:9px}.event-main{display:flex;flex-direction:column;gap:2px;min-width:0}.event-main strong{font-size:13px}.event-time{color:var(--cyan);font-size:11px;font-weight:900}.effect-label{color:var(--purple);font-size:9px;font-weight:900;letter-spacing:.8px;margin-top:4px}.event-main small{font-size:11px;text-transform:none;letter-spacing:0;line-height:1.4}.event-right{min-width:70px;text-align:right}.event-right b{color:var(--amber);font-size:11px}.event-right small{display:block;margin-top:3px;font-size:10px}.reason-list{display:grid;grid-template-columns:1fr 1fr;gap:6px}.reason-list div{background:#061426;border-left:3px solid var(--cyan);border-radius:6px;padding:8px 9px;font-size:12px;color:#d9e6f5}.news-note{color:#91a8bf;font-size:10px;margin-top:7px}.compact{padding:12px}.scanner-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:8px 0;border-bottom:1px solid #ffffff0a}.scanner-row span{color:var(--amber);font-weight:900}.equity-summary{background:#061426;padding:9px;border-radius:8px;color:#a8bfd6}.muted{color:#90a8bf}footer{display:flex;justify-content:space-between;color:#7790a9;font-size:10px;padding:2px 2px 15px}
 @media(max-width:900px){.hero-grid-main,.split-grid{grid-template-columns:1fr}.triple-grid{grid-template-columns:1fr 1fr}.dashboard-grid{grid-template-columns:1fr}.side-col{display:grid;grid-template-columns:1fr 1fr;gap:10px}.side-col .card{margin-bottom:0}.option-overview{grid-template-columns:repeat(3,1fr)}.option-view{grid-column:span 3}.top5-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:620px){html,body{font-size:14px}.container{padding:7px}.topbar{padding:10px 3px}.brand-icon{font-size:25px}.topbar h1{font-size:18px}.subline{font-size:10px}.top-actions{font-size:9px;gap:5px}.selector{flex-direction:column}.quick{display:grid;grid-template-columns:1fr 1fr}.symbol{min-width:0;padding:10px 8px;font-size:14px}.price{font-size:38px}.price-line{align-items:stretch}.day-change{min-width:135px;padding:9px}.day-change b{font-size:15px}.market-row{grid-template-columns:1fr 1fr}.tf-strip{grid-template-columns:repeat(3,1fr)}.tf-strip>div:nth-child(4),.tf-strip>div:nth-child(5){display:block}.card{padding:11px;border-radius:12px}.card h2{font-size:15px}.triple-grid,.side-col{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}.plan-grid{grid-template-columns:1fr 1fr}.plan-grid>div:first-child{grid-column:span 2}.option-overview{grid-template-columns:1fr 1fr}.option-view{grid-column:span 2}.top5-grid{grid-template-columns:1fr}.top5 th,.top5 td{font-size:11px;padding:7px 5px}.analysis-rows span,.factor-list span{font-size:13px}.analysis-rows b,.factor-list b{font-size:13px}.event-main strong{font-size:13px}.event-time{font-size:11px}.event-main small{font-size:11px}.reason-list{grid-template-columns:1fr}footer{flex-direction:column;gap:4px}.decision-card>strong{font-size:38px}}
+
+
+/* NAKSHATRA vivid market-clarity upgrade v5.4 */
+:root{--text:#f5f8ff;--muted:#c0d5ed;--green:#22f5a0;--red:#ff456d;--orange:#ffad42;--amber:#ffd166;--cyan:#45d5ff;--purple:#d77aff;--pink:#ff65b4}
+html,body{font-size:15px;color:#f5f8ff}
+.subline, .top-actions, .eyebrow, small, .card h2 small, th, .option-head-right, .analysis-rows span, .factor-list span, .muted, .news-note, footer, .event-main small, .option-view span{color:#bed3ed}
+.card h2{font-size:17px;letter-spacing:.1px}
+.eyebrow,small{font-size:12px;font-weight:700;letter-spacing:.6px}
+.market-row b,.plan-grid b,.metrics b,.option-overview b{font-size:16px;color:#f4f8ff}
+.market-row>div,.plan-grid>div,.metrics>div,.option-overview>div{border-color:#1c4266;background:linear-gradient(145deg,#091d34,#071529)}
+.price{font-size:clamp(40px,4.2vw,50px);color:#f4f9ff;text-shadow:0 0 20px #37caff20}
+.change,.day-change b,.day-change span{font-size:17px}
+.day-change small{color:#c6ddf4}
+.tf-strip b,.trend-list b,.analysis-rows b,.factor-list b{font-size:15px}
+.analysis-rows span,.factor-list span{font-size:14px}
+.analysis-rows b,.factor-list b{font-size:14px;color:#f5f8ff}
+.decision-card>strong{font-size:clamp(42px,4.5vw,52px);letter-spacing:.5px}
+.decision-card>span{font-size:16px;color:#e0eaff}
+.confidence-bar{height:12px}
+.option-overview>div small,.market-row small,.plan-grid small,.metrics small{color:#b9d9f5}
+th{font-size:11px;color:#c9ddf4}td{font-size:13px;color:#eef5ff}
+.reason-list div,.equity-summary{font-size:13px;color:#e4efff}
+.scanner-row b,.scanner-row span,.scanner-row small{font-size:13px}
+.event-time{font-size:12px}.effect-label{font-size:10px}
+/* Semantic signal colours are consistent across the entire dashboard. */
+.bull{color:var(--green)!important;text-shadow:0 0 10px #22f5a022}
+.bear{color:var(--red)!important;text-shadow:0 0 10px #ff456d22}
+.sideways{color:var(--orange)!important;text-shadow:0 0 10px #ffad4222}
+#decision.bull{color:var(--green)!important}#decision.bear{color:var(--red)!important}#decision.sideways{color:var(--orange)!important}
+#decision{transition:color .2s ease}
+#price{color:#f5f9ff}
+#dayChange,#dayChangePct{font-variant-numeric:tabular-nums}
+#dayHigh,#dayLow,#dayVolume,#openInterest,#entryZone,#stopLoss,#tp1,#tp2,#tp3,#rr,#pcrOi,#pcrVol,#atm,#maxPain,#support,#resistance{font-variant-numeric:tabular-nums}
+#dayHigh{color:var(--green)}#dayLow{color:var(--red)}
+.top5.calls td:nth-child(2),.top5.calls td:nth-child(3){color:#ff9ab8}
+.top5.puts td:nth-child(2),.top5.puts td:nth-child(3){color:#69f5c0}
+.top5.calls h3{font-size:14px}.top5.puts h3{font-size:14px}
+.live-pill{font-size:12px}
+@media(max-width:620px){html,body{font-size:15px}.topbar h1{font-size:19px}.subline{font-size:11px}.card h2{font-size:16px}.price{font-size:39px}.market-row b,.plan-grid b,.metrics b,.option-overview b{font-size:15px}.tf-strip b,.trend-list b{font-size:14px}.analysis-rows span,.factor-list span,.analysis-rows b,.factor-list b{font-size:14px}.decision-card>strong{font-size:40px}.top5 th,.top5 td{font-size:12px;padding:8px 5px}th{font-size:10px}td{font-size:12px}.option-overview>div{padding:10px}}
+
+/* NAKSHATRA violet neon theme + universal signal colouring v5.5 */
+:root{
+ --bg:#09051a;--card:#100a25;--card2:#160d31;--line:#49306f;
+ --text:#f8f4ff;--muted:#c9b8f2;--cyan:#66e7ff;--blue:#8b9dff;
+ --purple:#c084fc;--pink:#ff79d1;--green:#25f5a0;--red:#ff4d72;
+ --orange:#ffad42;--amber:#ffd166;
+}
+html,body{
+ color:#f8f4ff;
+ background:radial-gradient(ellipse at 50% -12%,#40206f 0%,#21103f 30%,#10091f 62%,#070411 100%);
+}
+.container{background:transparent}
+.card,.tf-strip.card{
+ background:linear-gradient(145deg,rgba(30,16,57,.97),rgba(12,8,29,.98));
+ border-color:#49306f;box-shadow:0 8px 26px #0006,0 0 14px #a855f70b;
+}
+.market-hero{border-color:#168e70;box-shadow:0 0 18px #22f5a014}
+.decision-card{background:linear-gradient(145deg,#29113d,#130a2a 72%,#0d0921);border-color:#9147c8}
+.symbol,.search-wrap,.search-results,.day-change,.market-row>div,.plan-grid>div,.metrics>div,.option-overview>div,.tf-strip>div,.catalyst-row,.reason-list div,.equity-summary{
+ background:linear-gradient(145deg,#1b1238,#100b26);border-color:#49336d;color:#f4edff
+}
+.symbol{color:#e9ddff}.symbol.active{background:linear-gradient(135deg,#203d69,#39205d);border-color:#66e7ff}
+.subline,.top-actions,.eyebrow,small,.card h2 small,th,.option-head-right,.analysis-rows span,.factor-list span,.muted,.news-note,footer,.event-main small,.option-view span{
+ color:#cdbcf2
+}
+.analysis-rows span,.factor-list span,.trend-list div>span,.mini-meta,.event-main small,.top5 h3 span{color:#c8b8ed}
+.card h2,.brand-icon{color:#e4b8ff}
+.topbar h1 em,.event-time{color:#66e7ff}
+.price,.market-row b,.plan-grid b,.metrics b,.option-overview b,.analysis-rows b,.factor-list b,.trend-list b,.mini-meta b,.reason-list div,.equity-summary,td{color:#f7f1ff}
+.price{ text-shadow:0 0 20px #b794ff2b }
+input::placeholder{color:#c2b1e9;opacity:1}
+input{color:#fff!important}
+.search-wrap input{font-size:15px}
+th{color:#d7c5ff;font-size:11px}td{color:#f1eaff}
+.bull,.bull *{color:var(--green)!important;text-shadow:0 0 10px #25f5a027}
+.bear,.bear *{color:var(--red)!important;text-shadow:0 0 10px #ff4d7224}
+.sideways,.sideways *{color:var(--orange)!important;text-shadow:0 0 10px #ffad4222}
+/* Keep direction-coloured text visible in every card, table, and module. */
+.analysis-rows b.bull,.factor-list b.bull,.trend-list b.bull,.metrics b.bull,td.bull{color:var(--green)!important}
+.analysis-rows b.bear,.factor-list b.bear,.trend-list b.bear,.metrics b.bear,td.bear{color:var(--red)!important}
+.analysis-rows b.sideways,.factor-list b.sideways,.trend-list b.sideways,.metrics b.sideways,td.sideways{color:var(--orange)!important}
+#dayHigh{color:var(--green)}#dayLow{color:var(--red)}
+.change{color:var(--red)}
+.decision-card>strong.bull{color:var(--green)!important}
+.decision-card>strong.bear{color:var(--red)!important}
+.decision-card>strong.sideways{color:var(--orange)!important}
+.confidence-bar{background:#30204f}
+.confidence-bar i{background:linear-gradient(90deg,#a855f7,#ff79d1)}
+.top5.calls{border-color:#a83c68}.top5.puts{border-color:#168e70}
+.top5.calls h3{background:#35132c;color:#ff8cab}.top5.puts h3{background:#0c3029;color:#52f5bb}
+.top5.calls td:nth-child(2),.top5.calls td:nth-child(3){color:#ff9ab8}
+.top5.puts td:nth-child(2),.top5.puts td:nth-child(3){color:#69f5c0}
+.option-view{border-color:#8b5cf6!important;background:#1c1239!important}
+.option-view b{color:#66e7ff}
+.live-pill{background:#073526;border-color:#0d8d5b;color:var(--green)}
+.refresh{background:#1a1035;border-color:#65439a;color:#f3eaff}
+button{transition:filter .15s ease,transform .15s ease}button:active{filter:brightness(1.15)}
+@media(max-width:620px){.price{font-size:40px}.card h2{font-size:17px}.eyebrow,small{font-size:12px}.market-row b,.plan-grid b,.metrics b,.option-overview b{font-size:16px}.analysis-rows span,.factor-list span,.analysis-rows b,.factor-list b{font-size:14px}}
