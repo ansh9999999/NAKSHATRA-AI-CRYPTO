@@ -23,7 +23,7 @@ function paintValueBias(root=document){
    const c=biasClass(raw);if(c)el.classList.add(c);
  });
 }
-function selectSymbol(s){symbol=s.toUpperCase();document.querySelectorAll('.symbol').forEach(b=>b.classList.toggle('active',b.dataset.symbol===symbol));$('cryptoSearch').value='';$('searchResults').innerHTML='';load()}
+function selectSymbol(s){symbol=s.toUpperCase();document.querySelectorAll('.symbol').forEach(b=>b.classList.toggle('active',b.dataset.symbol===symbol));$('cryptoSearch').value='';$('searchResults').innerHTML='';window.dispatchEvent(new CustomEvent('nakshatra:symbol-changed',{detail:{symbol}}));load()}
 function normalizeRows(o){
  const raw=Array.isArray(o?.rows)?o.rows:(Array.isArray(o?.atm_chain)?o.atm_chain:[]);
  const grouped=new Map();
