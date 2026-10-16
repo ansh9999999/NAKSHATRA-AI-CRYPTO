@@ -28,6 +28,7 @@ from history import get_multi_timeframe_history, get_history
 from analysis.signal import generate_signal
 from scanner import market_scan
 from delta import get_ticker, BASE_URL, session
+from global_market.router import router as global_market_router
 
 CACHE_TTL = 8
 PRODUCTS_TTL = 300
@@ -260,6 +261,7 @@ app = FastAPI(
 
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.include_router(global_market_router)
 
 
 @app.get("/", response_class=HTMLResponse)
