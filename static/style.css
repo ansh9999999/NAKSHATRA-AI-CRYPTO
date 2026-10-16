@@ -100,3 +100,24 @@ th{color:#d7c5ff;font-size:11px}td{color:#f1eaff}
 .refresh{background:#1a1035;border-color:#65439a;color:#f3eaff}
 button{transition:filter .15s ease,transform .15s ease}button:active{filter:brightness(1.15)}
 @media(max-width:620px){.price{font-size:40px}.card h2{font-size:17px}.eyebrow,small{font-size:12px}.market-row b,.plan-grid b,.metrics b,.option-overview b{font-size:16px}.analysis-rows span,.factor-list span,.analysis-rows b,.factor-list b{font-size:14px}}
+
+
+/* v5.6 FIX: enforce directional colours for every section and all dynamic values */
+:root{--bullish:#25f5a0;--bearish:#ff4d72;--neutral:#ffad42;--violet-text:#e6d6ff;--label-text:#cdbcf2}
+/* Grey/muted text becomes readable lavender, without bleaching signal states. */
+.subline,.top-actions,.eyebrow,small,.card h2 small,th,.option-head-right,.analysis-rows span,.factor-list span,.muted,.news-note,footer,.event-main small,.option-view span,.trend-list div>span,.mini-meta{color:var(--label-text)!important}
+.card h2{color:#e8c4ff}
+/* Semantic states must override component-specific white text declarations. */
+.bull,.bull *,b.bull,strong.bull,span.bull,td.bull,th.bull{color:var(--bullish)!important;text-shadow:0 0 10px #25f5a033!important}
+.bear,.bear *,b.bear,strong.bear,span.bear,td.bear,th.bear{color:var(--bearish)!important;text-shadow:0 0 10px #ff4d7233!important}
+.sideways,.sideways *,b.sideways,strong.sideways,span.sideways,td.sideways,th.sideways{color:var(--neutral)!important;text-shadow:0 0 10px #ffad4233!important}
+#decision.bull,#agreementMini.bull,#trend.bull,#activityRegime.bull,#riskState.bull,#optionView.bull,#moduleAstrology.bull,#moduleNumerology.bull,#sentimentBias.bull{color:var(--bullish)!important}
+#decision.bear,#agreementMini.bear,#trend.bear,#activityRegime.bear,#riskState.bear,#optionView.bear,#moduleAstrology.bear,#moduleNumerology.bear,#sentimentBias.bear{color:var(--bearish)!important}
+#decision.sideways,#agreementMini.sideways,#trend.sideways,#activityRegime.sideways,#riskState.sideways,#optionView.sideways,#moduleAstrology.sideways,#moduleNumerology.sideways,#sentimentBias.sideways{color:var(--neutral)!important}
+/* Keep violet surfaces; use a clear colour-coded outline for signal cards. */
+.card:has(.bear){border-color:#78304e}
+.card:has(.bull){border-color:#176a50}
+.card:has(.sideways){border-color:#79501f}
+/* Larger, higher-contrast numeric values across modules. */
+.market-row b,.plan-grid b,.metrics b,.option-overview b,.analysis-rows b,.factor-list b,.trend-list b,.scanner-row b,.scanner-row span,td{font-size:clamp(14px,1.05rem,17px)}
+@media(max-width:620px){.analysis-rows b,.factor-list b,.trend-list b,.scanner-row b,.scanner-row span{font-size:15px}.analysis-rows span,.factor-list span,.trend-list div>span{font-size:14px}}
