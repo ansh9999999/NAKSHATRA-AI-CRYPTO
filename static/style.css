@@ -121,3 +121,8 @@ button{transition:filter .15s ease,transform .15s ease}button:active{filter:brig
 /* Larger, higher-contrast numeric values across modules. */
 .market-row b,.plan-grid b,.metrics b,.option-overview b,.analysis-rows b,.factor-list b,.trend-list b,.scanner-row b,.scanner-row span,td{font-size:clamp(14px,1.05rem,17px)}
 @media(max-width:620px){.analysis-rows b,.factor-list b,.trend-list b,.scanner-row b,.scanner-row span{font-size:15px}.analysis-rows span,.factor-list span,.trend-list div>span{font-size:14px}}
+
+/* v5.9.1 sign-based daily change colours; override legacy default red */
+#dayChange.bull,#dayChangePct.bull,.day-change b.bull,.day-change span.bull{color:var(--bullish,#25f5a0)!important}
+#dayChange.bear,#dayChangePct.bear,.day-change b.bear,.day-change span.bear{color:var(--bearish,#ff4d72)!important}
+#dayChange.sideways,#dayChangePct.sideways,.day-change b.sideways,.day-change span.sideways{color:var(--neutral,#ffad42)!important}
