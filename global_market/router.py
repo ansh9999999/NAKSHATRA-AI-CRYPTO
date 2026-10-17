@@ -8,7 +8,7 @@ import requests
 from fastapi import APIRouter, Query
 
 router = APIRouter(prefix="/api/global-market", tags=["global-market"])
-TIMEOUT=(3,5); CACHE_SECONDS=15
+TIMEOUT=(1.5,2.5); CACHE_SECONDS=15
 _cache: dict[str, dict[str, Any]]={}; _context_cache={}; _lock=threading.Lock()
 _session=requests.Session(); _session.headers.update({"User-Agent":"Mozilla/5.0 (compatible; NakshatraAI/5.9; public-market-monitor)","Accept":"application/json,application/xml,text/xml,*/*"})
 
@@ -16,13 +16,12 @@ def _get(url: str, params: dict|None=None, expected=dict):
     r=_session.get(url,params=params,timeout=TIMEOUT); r.raise_for_status(); payload=r.json() if 'json' in r.headers.get('content-type','').lower() or url.endswith('.json') else None
     if payload is None: payload=r.text
     if expected is dict and not isinstance(payload,dict): raise ValueError('Unexpected provider response')
-    if expected is list and not isinstance(payload,list): raise ValueError('Unexpected provider response')
     return payload
 
-def _get_json_fallback(urls: list[str], params: dict|None=None, expected=dict):
+def _get_json_fallback(urls: list[str], params: dict|None=None):
     errors=[]
     for url in urls:
-        try: return _get(url,params,expected=expected)
+        try: return _get(url,params)
         except Exception as exc: errors.append(f"{url.split('/')[2]}: {str(exc)[:90]}")
     raise RuntimeError('All endpoint hosts failed: '+'; '.join(errors))
 
@@ -32,10 +31,10 @@ def _num(v):
     except (TypeError,ValueError): return None
 
 def _row(name,market,price,change,volume,source,status='OK',note=None):
-    return {'exchange':name,'market':market,'price':_num(price),'change_24h_pct':_num(change),'volume_24h':_num(volume),'source':source,'status':status,'note':note,'open_interest':None,'open_interest_change_pct':None,'funding_rate_pct':None,'options_open_interest':None,'order_book_imbalance_pct':None,'large_trade_flow':'Not connected','volume_interpretation':'Volume is participation context; it does not predict direction alone.'}
+    return {'exchange':name,'market':market,'price':_num(price),'change_24h_pct':_num(change),'volume_24h':_num(volume),'source':source,'status':status,'note':note,'open_interest':None,'open_interest_change_pct':None,'funding_rate_pct':None,'options_open_interest':None}
 
 def _binance_spot(symbol):
-    p=_get_json_fallback(['https://api.binance.com/api/v3/ticker/24hr','https://api1.binance.com/api/v3/ticker/24hr','https://api2.binance.com/api/v3/ticker/24hr','https://api3.binance.com/api/v3/ticker/24hr'],{'symbol':symbol})
+    p=_get_json_fallback(['https://api.binance.com/api/v3/ticker/24hr','https://api1.binance.com/api/v3/ticker/24hr'],{'symbol':symbol})
     return _row('Binance','Spot',p.get('lastPrice'),p.get('priceChangePercent'),p.get('quoteVolume'),'Binance Spot alternate-host fallback')
 
 def _binance_futures(symbol):
@@ -45,18 +44,13 @@ def _binance_futures(symbol):
         oi=_get_json_fallback(['https://fapi.binance.com/fapi/v1/openInterest'],{'symbol':symbol}); row['open_interest']=_num(oi.get('openInterest'))
     except Exception: pass
     try:
-        hist=_get_json_fallback(['https://fapi.binance.com/futures/data/openInterestHist','https://fapi1.binance.com/futures/data/openInterestHist'],{'symbol':symbol,'period':'1h','limit':2},expected=list)
+        hist=_get_json_fallback(['https://fapi.binance.com/futures/data/openInterestHist'],{'symbol':symbol,'period':'1h','limit':2})
         if isinstance(hist,list) and len(hist)>=2:
             old=_num(hist[-2].get('sumOpenInterestValue') or hist[-2].get('sumOpenInterest')); new=_num(hist[-1].get('sumOpenInterestValue') or hist[-1].get('sumOpenInterest'))
             if old and new is not None: row['open_interest_change_pct']=(new/old-1)*100
     except Exception: pass
     try:
         fr=_get_json_fallback(['https://fapi.binance.com/fapi/v1/premiumIndex'],{'symbol':symbol}); row['funding_rate_pct']=(_num(fr.get('lastFundingRate')) or 0)*100
-    except Exception: pass
-    try:
-        book=_get_json_fallback(['https://fapi.binance.com/fapi/v1/depth','https://fapi1.binance.com/fapi/v1/depth'],{'symbol':symbol,'limit':20})
-        bids=sum((_num(x[1]) or 0) for x in book.get('bids',[])); asks=sum((_num(x[1]) or 0) for x in book.get('asks',[])); total=bids+asks
-        row['order_book_imbalance_pct']=((bids-asks)/total*100) if total else None
     except Exception: pass
     return row
 
@@ -85,11 +79,6 @@ def _bybit(symbol):
             old=_num(lst[-1].get('openInterest')); new=_num(lst[0].get('openInterest'))
             if old and new is not None: row['open_interest_change_pct']=(new/old-1)*100
     except Exception: pass
-    try:
-        book=_get('https://api.bybit.com/v5/market/orderbook',{'category':'linear','symbol':symbol,'limit':25})
-        item=(book.get('result') or {}); bids=sum((_num(x[1]) or 0) for x in item.get('b',[])); asks=sum((_num(x[1]) or 0) for x in item.get('a',[])); total=bids+asks
-        row['order_book_imbalance_pct']=((bids-asks)/total*100) if total else None
-    except Exception: pass
     return row
 
 def _okx(symbol):
@@ -103,11 +92,6 @@ def _okx(symbol):
     except Exception: pass
     try:
         fr=_get('https://www.okx.com/api/v5/public/funding-rate',{'instId':inst}); item=(fr.get('data') or [{}])[0]; val=_num(item.get('fundingRate')); row['funding_rate_pct']=val*100 if val is not None else None
-    except Exception: pass
-    try:
-        book=_get('https://www.okx.com/api/v5/market/books',{'instId':inst,'sz':20}); item=(book.get('data') or [{}])[0]
-        bids=sum((_num(x[1]) or 0) for x in item.get('bids',[])); asks=sum((_num(x[1]) or 0) for x in item.get('asks',[])); total=bids+asks
-        row['order_book_imbalance_pct']=((bids-asks)/total*100) if total else None
     except Exception: pass
     return row
 
@@ -161,7 +145,7 @@ def _build_snapshot(symbol):
     risk_score=int(round(min(100,risk_score)))
     risk_label='HIGH' if risk_score>=65 else 'ELEVATED' if risk_score>=35 else 'LOW'
     deriv=[r for r in rows if r.get('open_interest') is not None or r.get('funding_rate_pct') is not None]
-    smart={'open_interest':next((r['open_interest'] for r in deriv if r.get('open_interest') is not None),None),'open_interest_source':next((r['exchange'] for r in deriv if r.get('open_interest') is not None),None),'funding_rate_pct':next((r['funding_rate_pct'] for r in deriv if r.get('funding_rate_pct') is not None),None),'funding_source':next((r['exchange'] for r in deriv if r.get('funding_rate_pct') is not None),None),'order_book_imbalance':_median([r['order_book_imbalance_pct'] for r in rows if r.get('order_book_imbalance_pct') is not None]),'rows':[{k:r.get(k) for k in ('exchange','market','open_interest','open_interest_change_pct','funding_rate_pct','options_open_interest','order_book_imbalance_pct','status','note')} for r in rows if r['market'] in ('USD-M Futures','USDT Perpetual') or r['exchange']=='Binance'],'note':'OI change is shown only where a provider returns comparable snapshots. Rising OI means leverage/positions are building, not automatically bullish; combine with price direction and funding. Option OI is unavailable in these public adapters.'}
+    smart={'open_interest':next((r['open_interest'] for r in deriv if r.get('open_interest') is not None),None),'open_interest_source':next((r['exchange'] for r in deriv if r.get('open_interest') is not None),None),'funding_rate_pct':next((r['funding_rate_pct'] for r in deriv if r.get('funding_rate_pct') is not None),None),'funding_source':next((r['exchange'] for r in deriv if r.get('funding_rate_pct') is not None),None),'order_book_imbalance':None,'rows':[{k:r.get(k) for k in ('exchange','market','open_interest','open_interest_change_pct','funding_rate_pct','options_open_interest','status','note')} for r in rows if r['market'] in ('USD-M Futures','USDT Perpetual') or r['exchange']=='Binance'],'note':'OI change is shown only where a provider returns comparable snapshots. Rising OI means leverage/positions are building, not automatically bullish; combine with price direction and funding. Option OI is unavailable in these public adapters.'}
     if smart['open_interest_change_pct'] if 'open_interest_change_pct' in smart else False: pass
     # Explain what the observed derivatives combination means without overstating it.
     oi_changes=[r.get('open_interest_change_pct') for r in rows if r.get('open_interest_change_pct') is not None]
@@ -172,8 +156,6 @@ def _build_snapshot(symbol):
     elif oi_ch<-1: deriv_effect='OI falling: positions are closing/deleveraging; move may be position unwind rather than fresh conviction.'
     else: deriv_effect='OI is broadly stable; no strong leverage expansion signal from available feeds.'
     smart['median_oi_change_pct']=oi_ch; smart['effect']=deriv_effect
-    obi=smart.get('order_book_imbalance')
-    smart['order_book_effect']=('Bid depth exceeds ask depth in sampled order book; this is short-term visible liquidity, not guaranteed buying pressure.' if obi is not None and obi>10 else 'Ask depth exceeds bid depth in sampled order book; this is short-term visible liquidity, not guaranteed selling pressure.' if obi is not None and obi<-10 else 'Order-book depth is roughly balanced or too limited to interpret.' if obi is not None else 'Order-book feed unavailable; cannot infer visible bid/ask pressure.')
     # Funding interpretation: positive means longs pay shorts; extreme readings can imply crowded positioning.
     fund=_median([r['funding_rate_pct'] for r in deriv if r.get('funding_rate_pct') is not None])
     smart['median_funding_rate_pct']=fund
@@ -182,7 +164,7 @@ def _build_snapshot(symbol):
     elif fund<-0.03: smart['funding_effect']='Negative funding: short positioning may be crowded; upside squeeze risk can rise if price reverses.'
     else: smart['funding_effect']='Funding is not extreme by this simple threshold; funding alone is not a direction signal.'
     now=datetime.now(timezone.utc).isoformat()
-    return {'status':'OK' if available else 'DATA LIMITED','symbol':symbol,'base_asset':'BTC' if symbol.startswith('BTC') else 'ETH','updated_at':now,'cache_seconds':CACHE_SECONDS,'provider_count':len(rows),'available_count':len(available),'global_mean_price':avg,'median_change_24h_pct':med,'consensus':consensus,'consensus_ratio':round(ratio,1) if ratio is not None else None,'exchanges':rows,'divergences':divergences,'early_warning':{'level':level,'title':title,'direction':alertdir,'reasons':reasons,'method':'24h ticker thresholds + cross-exchange spread; cannot predict second-by-second moves.'},'smart_money':smart,'liquidation_risk':{'status':'UNCONFIRMED','long_short_squeeze':'NO LIVE LIQUIDATION FEED','effect':'A squeeze needs forced liquidations plus price/positioning evidence. Rising OI and funding are context only; without a live liquidation stream, long/short squeeze direction cannot be confirmed.','note':'Liquidation stream is not connected. Treat as unconfirmed, not as zero risk.'},'probability':{'up_pct':None,'down_pct':None,'status':'HEURISTIC RISK SCORE — NOT PROBABILITY','risk_score':risk_score,'risk_label':risk_label,'direction_bias':consensus,'note':f'Monitoring score {risk_score}/100 ({risk_label}) from 24h move, cross-exchange spread and agreement. It is NOT a statistically calibrated probability; direction bias is {consensus}.'},'scenarios':{'upside':'Upside follow-through is better supported if selected-asset price rises with increasing volume, OI builds without extreme positive funding, and multiple exchanges agree.','downside':'Downside follow-through is better supported if price falls with rising sell volume, multiple exchanges confirm, and liquidation/OI evidence agrees.','invalidations':'If exchanges disagree, volume is thin, feeds are stale, or derivatives are unavailable, treat direction as low-confidence.'},'definitions':{'intraday_high':'HIGH means elevated volatility/activity, not bullish. Direction comes from each timeframe signal: green bullish, red bearish, orange sideways/neutral.','divergence':'Price spread between exchanges can reflect liquidity, timing, or venue-specific flow; large spread may increase execution/slippage risk, not prove manipulation.','volume':'Rising volume with price move supports participation; price move on low volume is less confirmed. Volume alone does not tell future direction.','open_interest':'Rising open interest means more outstanding contracts, not automatically bullish; combine with price direction. Falling OI often indicates position closure/deleveraging.','funding':'Positive perpetual funding generally means longs pay shorts; extreme positive funding can signal crowded longs. Negative funding can indicate crowded shorts.','liquidation':'A liquidation/squeeze conclusion requires actual forced-order/liquidation data. Without that stream the state is unconfirmed, not zero risk.','risk_score':'The 0–100 score is a rule-based monitoring score from 24h movement, spread and exchange agreement. It is not a calibrated probability and has no measured historical accuracy yet.'}}
+    return {'status':'OK' if available else 'DATA LIMITED','symbol':symbol,'base_asset':'BTC' if symbol.startswith('BTC') else 'ETH','updated_at':now,'cache_seconds':CACHE_SECONDS,'provider_count':len(rows),'available_count':len(available),'global_mean_price':avg,'median_change_24h_pct':med,'consensus':consensus,'consensus_ratio':round(ratio,1) if ratio is not None else None,'exchanges':rows,'divergences':divergences,'early_warning':{'level':level,'title':title,'direction':alertdir,'reasons':reasons,'method':'24h ticker thresholds + cross-exchange spread; cannot predict second-by-second moves.'},'smart_money':smart,'liquidation_risk':{'status':'UNCONFIRMED','long_short_squeeze':'NO LIVE LIQUIDATION FEED','effect':'A squeeze needs forced liquidations plus price/positioning evidence. Rising OI and funding are context only; without a live liquidation stream, long/short squeeze direction cannot be confirmed.','note':'Liquidation stream is not connected. Treat as unconfirmed, not as zero risk.'},'probability':{'up_pct':None,'down_pct':None,'status':'HEURISTIC RISK SCORE — NOT PROBABILITY','risk_score':risk_score,'risk_label':risk_label,'direction_bias':consensus,'note':f'Monitoring score {risk_score}/100 ({risk_label}) from 24h move, cross-exchange spread and agreement. It is NOT a statistically calibrated probability; direction bias is {consensus}.'},'definitions':{'intraday_high':'HIGH means elevated volatility/activity, not bullish. Direction comes from each timeframe signal: green bullish, red bearish, orange sideways/neutral.','divergence':'Price spread between exchanges can reflect liquidity, timing, or venue-specific flow; large spread may increase execution/slippage risk, not prove manipulation.','volume':'Rising volume with price move supports participation; price move on low volume is less confirmed. Volume alone does not tell future direction.'}}
 
 @router.get('/snapshot')
 def global_snapshot(symbol:str=Query('BTCUSDT'),force:bool=Query(False)):
@@ -198,43 +180,13 @@ def global_snapshot(symbol:str=Query('BTCUSDT'),force:bool=Query(False)):
     with _lock:_cache[normalized]={'at':time.time(),'data':data}
     return data
 
-def _fetch_calendar_events(errors):
-    """Fetch a public economic-calendar mirror; gracefully report if unavailable."""
-    urls=['https://nfs.faireconomy.media/ff_calendar_thisweek.json']
-    for url in urls:
-        try:
-            items=_get(url,expected=list)
-            out=[]
-            now=datetime.now(timezone.utc)
-            for item in items:
-                if str(item.get('country','')).upper() not in ('USD','US','UNITED STATES'):
-                    continue
-                impact=str(item.get('impact','')).lower()
-                if impact not in ('high','medium'):
-                    continue
-                title=str(item.get('title') or item.get('event') or 'USD economic event')[:180]
-                raw_date=str(item.get('date') or item.get('datetime') or '')
-                try:
-                    dt=datetime.fromisoformat(raw_date.replace('Z','+00:00'))
-                    if dt.tzinfo is None: dt=dt.replace(tzinfo=timezone.utc)
-                    dt_ist=dt.astimezone(__import__('datetime').timezone(__import__('datetime').timedelta(hours=5,minutes=30)))
-                    if dt < now.replace(year=now.year-1): continue
-                    display_time=dt_ist.strftime('%d %b %Y, %I:%M %p IST')
-                except Exception: display_time=raw_date or 'Time not supplied'
-                actual=str(item.get('actual') or '').strip(); forecast=str(item.get('forecast') or '').strip(); previous=str(item.get('previous') or '').strip()
-                out.append({'title':title,'country':'USD','impact':impact.upper(),'date':raw_date,'time_ist':display_time,'actual':actual or None,'forecast':forecast or None,'previous':previous or None,'effect':'Potential volatility catalyst. Direction depends on the event, actual-versus-forecast surprise, and broader macro context; not assigned in advance.'})
-            return out[:12]
-        except Exception as exc:
-            errors.append('Economic calendar unavailable: '+str(exc)[:100])
-    return []
-
 @router.get('/context')
 def global_context(symbol:str=Query('BTCUSDT'),force:bool=Query(False)):
     """Public Fear & Greed and crypto headlines. Calendar is explicitly not fabricated."""
-    normalized='ETHUSDT' if symbol.upper().replace('/','').replace('-','').startswith('ETH') else 'BTCUSDT'; key='context:'+normalized; now=time.time()
+    key='context'; now=time.time()
     with _lock:
         if not force and key in _context_cache and now-_context_cache[key]['at']<300:return _context_cache[key]['data']
-    fng=None; headlines=[]; errors=[]; calendar_events=[]
+    fng=None; headlines=[]; errors=[]
     try:
         d=_get('https://api.alternative.me/fng/?limit=1&format=json'); item=(d.get('data') or [{}])[0]
         val=_num(item.get('value')); label=item.get('value_classification')
@@ -247,8 +199,7 @@ def global_context(symbol:str=Query('BTCUSDT'),force:bool=Query(False)):
             title=(item.findtext('title') or '').strip(); link=(item.findtext('link') or '').strip(); pub=(item.findtext('pubDate') or '').strip()
             if title: headlines.append({'title':title[:220],'url':link,'published':pub,'effect':_headline_effect(title)})
     except Exception as exc: errors.append('News RSS unavailable: '+str(exc)[:100])
-    calendar_events=_fetch_calendar_events(errors)
-    out={'updated_at':datetime.now(timezone.utc).isoformat(),'symbol':normalized,'base_asset':'ETH' if normalized.startswith('ETH') else 'BTC','fear_greed':fng,'headlines':headlines,'calendar_events':calendar_events,'calendar_status':'CONNECTED • PUBLIC USD CALENDAR' if calendar_events else 'UNAVAILABLE','calendar_note':'Public calendar mirror: USD high/medium-impact events only. Times/fields depend on provider; event effects are contextual, not deterministic. Headlines are separate from scheduled events.','errors':errors,'sentiment_method':'Fear & Greed index plus keyword-based CoinDesk headline tags; not a trained social sentiment model. Social sentiment provider is not connected.'}
+    out={'updated_at':datetime.now(timezone.utc).isoformat(),'fear_greed':fng,'headlines':headlines,'calendar_status':'NOT CONNECTED','calendar_note':'No verified live economic/event calendar is connected. Headlines below are news catalysts, not scheduled future events. Connect a calendar provider before treating event times as confirmed.','errors':errors,'sentiment_method':'Fear & Greed index plus simple keyword-based headline tags; not a trained sentiment model.'}
     with _lock:_context_cache[key]={'at':time.time(),'data':out}
     return out
 
