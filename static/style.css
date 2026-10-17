@@ -122,7 +122,66 @@ button{transition:filter .15s ease,transform .15s ease}button:active{filter:brig
 .market-row b,.plan-grid b,.metrics b,.option-overview b,.analysis-rows b,.factor-list b,.trend-list b,.scanner-row b,.scanner-row span,td{font-size:clamp(14px,1.05rem,17px)}
 @media(max-width:620px){.analysis-rows b,.factor-list b,.trend-list b,.scanner-row b,.scanner-row span{font-size:15px}.analysis-rows span,.factor-list span,.trend-list div>span{font-size:14px}}
 
-/* v5.9.1 sign-based daily change colours; override legacy default red */
-#dayChange.bull,#dayChangePct.bull,.day-change b.bull,.day-change span.bull{color:var(--bullish,#25f5a0)!important}
-#dayChange.bear,#dayChangePct.bear,.day-change b.bear,.day-change span.bear{color:var(--bearish,#ff4d72)!important}
-#dayChange.sideways,#dayChangePct.sideways,.day-change b.sideways,.day-change span.sideways{color:var(--neutral,#ffad42)!important}
+
+
+/* ACCESSIBILITY OVERRIDE v6.0 — high myopia, large type, high contrast */
+:root{
+  --bg:#080313; --card:#160b2c; --card2:#20103b; --line:#69459b;
+  --text:#fffaff; --muted:#e0d4f5; --cyan:#62e5ff; --blue:#6db8ff;
+  --purple:#df9cff; --pink:#ff75b5; --green:#35f5a2; --red:#ff5c7c;
+  --amber:#ffc15b; --orange:#ffad42;
+}
+html{font-size:18px;scroll-behavior:smooth}
+body{
+  background:radial-gradient(circle at 50% -10%,#35105b 0,#150827 42%,#080313 100%);
+  color:#fffaff;font-size:18px;line-height:1.6;letter-spacing:.01em;
+}
+.container{padding:18px}
+.topbar h1{font-size:clamp(25px,4.5vw,32px)}
+.subline{font-size:16px;line-height:1.5;color:#e0d4f5}
+.top-actions{font-size:15px;color:#e0d4f5}
+button,input,select,textarea{font:inherit}
+button{min-height:48px}
+input{min-height:48px}
+.card{
+  border-color:#69459b;
+  background:linear-gradient(145deg,rgba(31,14,57,.98),rgba(12,6,27,.99));
+  box-shadow:0 0 0 1px rgba(210,160,255,.06),0 8px 24px rgba(0,0,0,.22);
+}
+h2{font-size:clamp(21px,3.4vw,27px);line-height:1.35}
+h3{font-size:20px;line-height:1.4}
+small,.eyebrow,.market-row small,.plan-grid small{font-size:15px!important;color:#e0d4f5!important;line-height:1.5}
+.market-row b,.plan-grid b,.metrics b,.option-overview b,.analysis-rows b,
+.factor-list b,.trend-list b,.scanner-row b,.scanner-row span,td{
+  font-size:clamp(17px,1.12rem,20px);
+}
+.market-hero .price{font-size:clamp(42px,8vw,58px);line-height:1.15}
+.change,.day-change b,.day-change span{font-size:clamp(19px,4vw,23px)}
+.symbol{font-size:18px!important}
+.search-wrap input{font-size:18px!important}
+.analysis-rows span,.factor-list span,.trend-list div>span,
+.mini-meta,.gm-note,.global-footnote{font-size:16px!important;line-height:1.65}
+#decision{font-size:clamp(42px,8vw,56px)}
+#confidence{font-size:19px}
+.tf-strip small{font-size:16px!important}
+.tf-strip b{font-size:19px!important}
+.card:has(.bear){border-color:#a83b5a}
+.card:has(.bull){border-color:#23865e}
+.card:has(.sideways){border-color:#a36b24}
+@media(max-width:620px){
+  html{font-size:18px}
+  .container{padding:12px}
+  .topbar{align-items:flex-start;gap:10px}
+  .topbar h1{font-size:25px}
+  .subline{font-size:15px}
+  .top-actions{gap:6px;font-size:14px}
+  .card{padding:14px!important}
+  .market-row{gap:9px}
+  .market-row>div{padding:12px!important}
+  .market-row b,.plan-grid b,.metrics b,.option-overview b,
+  .analysis-rows b,.factor-list b,.trend-list b,.scanner-row b,
+  .scanner-row span,td{font-size:17px!important}
+  .analysis-rows span,.factor-list span,.trend-list div>span{font-size:16px!important}
+  .selector .quick{gap:8px}
+  .symbol{min-height:54px!important;font-size:17px!important}
+}
