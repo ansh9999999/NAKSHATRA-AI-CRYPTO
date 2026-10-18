@@ -135,3 +135,27 @@
   #gmDerivRows td{font-size:16px!important;padding:12px 10px}
   #gmDerivRows td:last-child{min-width:230px}
 }
+
+
+/* v6.3: high-contrast news links and clear directional cards */
+.catalyst-news-title,
+#gmHeadlines a,
+.catalyst a { color:#76e4ff !important; text-decoration:underline; text-decoration-thickness:1px; text-underline-offset:3px; }
+.catalyst-news-title:visited,
+.catalyst a:visited { color:#a5eaff !important; }
+.catalyst-news-box .event-time { display:block; margin-top:8px; line-height:1.45; overflow-wrap:anywhere; }
+.catalyst-news-box .effect-label { display:block; margin-top:10px; line-height:1.35; }
+.catalyst-news-effect { line-height:1.5; margin:8px 0 0; }
+.gm-pill.bull,.gm-signal.bull { color:#31e6a0!important; border-color:#16865e!important; background:#062d25!important; }
+.gm-pill.bear,.gm-signal.bear { color:#ff6688!important; border-color:#a72c50!important; background:#35101f!important; }
+.gm-pill.sideways,.gm-signal.sideways { color:#ffc66d!important; border-color:#9c6b20!important; background:#33220b!important; }
+#gmSmartBiasNote { font-weight:600; }
+@media(max-width:700px){
+  .catalyst-news-title { font-size:18px!important; line-height:1.5!important; overflow-wrap:anywhere; }
+  .catalyst-news-box { padding:16px!important; }
+  .catalyst-news-box .event-time { font-size:15px!important; }
+}
+
+/* v6.4: public Deribit options metrics can make the derivatives table wide; allow deliberate horizontal scrolling. */
+#gmDerivRows td { min-width:92px; }
+#gmDerivRows td:last-child { min-width:245px; white-space:normal; }
