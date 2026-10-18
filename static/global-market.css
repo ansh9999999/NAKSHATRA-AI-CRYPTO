@@ -126,3 +126,12 @@
  .catalyst-box-title,.catalyst-news-heading{font-size:17px}
  .catalyst-calendar-box p,.catalyst-news-effect{font-size:16px!important}
 }
+
+
+/* v6.2 derivatives table and mobile clarity */
+#gmDerivRows td{vertical-align:top;min-width:100px}
+#gmDerivRows td:last-child{min-width:230px;white-space:normal}
+@media(max-width:700px){
+  #gmDerivRows td{font-size:16px!important;padding:12px 10px}
+  #gmDerivRows td:last-child{min-width:230px}
+}
