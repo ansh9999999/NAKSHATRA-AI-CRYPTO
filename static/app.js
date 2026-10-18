@@ -29,18 +29,18 @@ function normalizeRows(o){
  const grouped=new Map();
  for(const r of raw){
    const strike=num(r.strike??r.strike_price); if(strike===null) continue;
-   const x=grouped.get(strike)||{strike,ceLtp:null,ceOi:null,peLtp:null,peOi:null,ceDoi:null,peDoi:null,atm:Boolean(r.atm)};
+   const x=grouped.get(strike)||{strike,ceLtp:null,ceOi:null,peLtp:null,peOi:null,ceDoi:null,peDoi:null,ceVol:null,peVol:null,atm:Boolean(r.atm)};
    const typ=String(r.type??r.contract_type??'').toUpperCase();
    const oi=num(r.oi??r.open_interest);
    const ltp=num(r.ltp??r.close??r.mark_price);
    const doi=num(r.oi_change??r.call_oi_change??r.put_oi_change??r.delta_oi);
-   if(typ.includes('CALL')||typ==='CE'||typ==='CALL_OPTIONS'){x.ceOi=oi;x.ceLtp=ltp;x.ceDoi=doi;}
-   else if(typ.includes('PUT')||typ==='PE'||typ==='PUT_OPTIONS'){x.peOi=oi;x.peLtp=ltp;x.peDoi=doi;}
+   if(typ.includes('CALL')||typ==='CE'||typ==='CALL_OPTIONS'){x.ceOi=oi;x.ceLtp=ltp;x.ceDoi=doi;x.ceVol=num(r.volume??r.vol??r.turnover);}
+   else if(typ.includes('PUT')||typ==='PE'||typ==='PUT_OPTIONS'){x.peOi=oi;x.peLtp=ltp;x.peDoi=doi;x.peVol=num(r.volume??r.vol??r.turnover);}
    else {
      x.ceLtp=num(r.call_ltp??r.ce_ltp??r.ce?.ltp); x.ceOi=num(r.call_oi??r.ce_oi??r.ce?.oi);
      x.peLtp=num(r.put_ltp??r.pe_ltp??r.pe?.ltp); x.peOi=num(r.put_oi??r.pe_oi??r.pe?.oi);
-     x.ceDoi=num(r.call_oi_change??r.ce_oi_change??r.ce?.oi_change??r.delta_oi_call);
-     x.peDoi=num(r.put_oi_change??r.pe_oi_change??r.pe?.oi_change??r.delta_oi_put);
+     x.ceDoi=num(r.call_oi_change??r.ce_oi_change??r.ce?.oi_change??r.delta_oi_call); x.ceVol=num(r.call_volume??r.ce_volume??r.ce?.volume);
+     x.peDoi=num(r.put_oi_change??r.pe_oi_change??r.pe?.oi_change??r.delta_oi_put); x.peVol=num(r.put_volume??r.pe_volume??r.pe?.volume);
    }
    grouped.set(strike,x);
  }
@@ -61,7 +61,7 @@ function calcOption(o,spot){
  const serverPuts=Array.isArray(o.top_put_oi)?o.top_put_oi:[];
  const topCalls=(serverCalls.length?serverCalls.map(r=>{const x=byStrike.get(num(r.strike))||{};return {...x,strike:num(r.strike),ceOi:num(r.oi??x.ceOi)}}):rows.filter(r=>r.ceOi!=null).sort((a,b)=>(b.ceOi||0)-(a.ceOi||0)).slice(0,5));
  const topPuts=(serverPuts.length?serverPuts.map(r=>{const x=byStrike.get(num(r.strike))||{};return {...x,strike:num(r.strike),peOi:num(r.oi??x.peOi)}}):rows.filter(r=>r.peOi!=null).sort((a,b)=>(b.peOi||0)-(a.peOi||0)).slice(0,5));
- return {rows,atm,pcr,callOi,putOi,support,resistance,maxPain:num(o.max_pain),expiry:o.expiry||'—',status:o.status||'OK',view,topCalls,topPuts};
+ const callVol=rows.reduce((s,r)=>s+(r.ceVol||0),0),putVol=rows.reduce((s,r)=>s+(r.peVol||0),0); return {rows,atm,pcr,callOi,putOi,callVol,putVol,support,resistance,maxPain:num(o.max_pain),expiry:o.expiry||'—',status:o.status||'OK',view,topCalls,topPuts};
 }
 function renderTradePlan(x,price){
  const p=x.trade_plan||{};let side=String(p.side||x.recommendation||'WAIT').toUpperCase();
@@ -72,6 +72,7 @@ function renderTradePlan(x,price){
 function renderOption(o,price){
  const oc=calcOption(o,price||0);set('expiry',`Expiry ${oc.expiry}`);set('optionStatus',oc.status==='OK'?'● LIVE':'● NO DATA');set('pcrOi',fmt(oc.pcr,3));set('pcrVol',fmt(o.pcr_volume,3));set('atm',fmt(oc.atm,0));set('maxPain',fmt(oc.maxPain,0));set('support',fmt(oc.support,0));set('resistance',fmt(oc.resistance,0));
  set('optionView',oc.view);set('optionViewReason',o.reason||'OI positioning snapshot');$('optionView').className=biasClass(oc.view);
+ if(oc.callVol>0||oc.putVol>0){const vr=oc.callVol?oc.putVol/oc.callVol:null;const vb=vr!==null?(vr>=1.2?'BEARISH PUT-VOLUME DOMINANCE':vr<=0.75?'BULLISH CALL-VOLUME DOMINANCE':'SIDEWAYS / BALANCED VOLUME'):'UNCONFIRMED';set('callPutVolumeBias',vb);paintBias('callPutVolumeBias',vb);set('callPutVolumeEffect',`Call volume ${fmt(oc.callVol,0)} • Put volume ${fmt(oc.putVol,0)}. ${vr!==null&&vr>=1.2?'Put-side activity dominates; may reflect hedging or bearish speculation, confirm price/OI.':vr!==null&&vr<=0.75?'Call-side activity dominates; may reflect bullish speculation, confirm price/OI.':'No strong call/put volume imbalance.'}`)}else{set('callPutVolumeBias','UNAVAILABLE');set('callPutVolumeEffect','This option-chain feed does not provide comparable call/put traded volume. OI/PCR are not substitutes for traded volume.')}
  const row=(r,i,type)=>`<tr><td>${i+1}</td><td>${fmt(r.strike,0)}</td><td>${fmt(type==='CE'?r.ceOi:r.peOi,0)}</td><td>${fmt(type==='CE'?r.ceLtp:r.peLtp,2)}</td><td>${fmt(type==='CE'?r.ceDoi:r.peDoi,0)}</td></tr>`;
  $('topCalls').innerHTML=oc.topCalls.map((r,i)=>row(r,i,'CE')).join('')||'<tr><td colspan="5">No call OI data</td></tr>';
  $('topPuts').innerHTML=oc.topPuts.map((r,i)=>row(r,i,'PE')).join('')||'<tr><td colspan="5">No put OI data</td></tr>';
@@ -90,7 +91,7 @@ function render(a){
  $('reasons').innerHTML=(x.reasons||[]).slice(0,6).map(r=>`<div>• ${esc(r)}</div>`).join('')||'<div>No high-quality reasons returned.</div>';
  if(!window.NAKSHATRA_GLOBAL_CONTEXT){const eventList=(ev.watchlist||ev.upcoming||[]).slice(0,4);$('catalyst').innerHTML=eventList.map(e=>{const dt=e.date_ist||e.time_ist?[e.date_ist,e.time_ist].filter(Boolean).join(' • '):e.datetime_ist||'Time varies (IST)';return `<div class="catalyst-row"><div class="event-main"><strong>${esc(e.name)}</strong><span class="event-time">🕒 ${esc(dt)}</span><span class="effect-label">CRYPTO EFFECT</span><small>${esc(e.effect||'Possible volatility impact; direction depends on actual release vs expectations.')}</small></div><div class="event-right"><b>${esc(e.impact||'—')}</b><small>${esc(e.status||'')}</small></div></div>`}).join('')||'<div class="muted">No scheduled event data.</div>'; }
  const tech=x.technical||{};set('moduleTechnical',tech.signal||'—');set('moduleOption',o.signal||'—');set('moduleAstrology',ast.bias||'—');set('moduleAstrology2',ast.bias||'—');set('moduleNumerology',numx.bias||'—');set('moduleNumerology2',numx.bias||'—');set('trend',x.trend||it.overall||'—');paintBias('trend',x.trend||it.overall);paintBias('activityRegime',sess.activity);paintBias('sentimentBias',sent.bias||sent.signal||sent.overall);paintBias('riskState',$('riskState')?.textContent);paintBias('optionView',o.signal||'');
- $('metrics').innerHTML=[['EMA9',x.ema9],['EMA21',x.ema21],['EMA50',x.ema50],['EMA200',x.ema200],['RSI',x.rsi],['MACD',x.macd],['ATR',x.atr],['Technical Score',tech.score]].map(q=>`<div><small>${q[0]}</small><b>${fmt(q[1],4)}</b></div>`).join('');
+ $('metrics').innerHTML=[['EMA9',x.ema9],['EMA21',x.ema21],['EMA50',x.ema50],['EMA200',x.ema200],['RSI (14)',x.rsi],['Stochastic RSI',window.NAKSHATRA_STOCH_RSI??'Loading…'],['MACD',x.macd],['ATR',x.atr],['Technical Score',tech.score]].map(q=>`<div><small>${q[0]}</small><b>${fmt(q[1],4)}</b></div>`).join('');
  $('astroRows').innerHTML=[['Rashi Trend',ast.rashi_trend||ast.bias],['Nakshatra',ast.nakshatra_influence||ast.nakshatra],['Tithi',ast.tithi_impact||ast.tithi],['Yoga',ast.yoga],['Karana',ast.karana],['Planetary',ast.planetary_alignment],['Score',ast.score]].map(q=>`<div><span>${esc(q[0])}</span><b>${esc(q[1])}</b></div>`).join('');
  $('numRows').innerHTML=[['Life Path',numx.life_path],['Expression',numx.expression_number],['Day Vibration',numx.day_vibration],['Market Number',numx.market_number],['Score',numx.score]].map(q=>`<div><span>${esc(q[0])}</span><b>${esc(q[1])}</b></div>`).join('');
  const gc=window.NAKSHATRA_GLOBAL_CONTEXT||null;const gf=gc?.fear_greed;const sb=gf?.bias||sent.bias||sent.signal||sent.overall||'—';set('sentimentBias',sb);$('sentimentRows').innerHTML=[['Social Sentiment',sent.social_sentiment||'Not connected'],['News Sentiment',gc?.headlines?.length?`${gc.headlines.length} live headlines`:(sent.news_sentiment||'Not connected')],['Fear/Greed',gf?`${gf.label} (${gf.value})`:(sent.fear_greed||'Unavailable')],['Overall Score',gf?`${gf.bias} • F&G index`:(sent.score??'Unavailable')]].map(q=>`<div><span>${esc(q[0])}</span><b>${esc(q[1])}</b></div>`).join('');
@@ -98,6 +99,27 @@ function render(a){
  set('agreeTechnical',ag.technical||'—');set('agreeOptions',ag.option_chain||'—');set('agreeAstrology',ag.astrology||'—');set('agreeNumerology',ag.numerology||'—');set('agreeFinal',ag.final||x.agreement||'—');
  $('status').textContent='● LIVE';$('dataState').textContent='● LIVE';$('updateStatus').textContent=`Updated ${new Date().toLocaleTimeString()}`;const ch=num(t.change_24h);if($('change'))$('change').classList.toggle('bull',ch!==null&&ch>=0);if($('change'))$('change').classList.toggle('bear',ch!==null&&ch<0);paintValueBias();
 }
+
+async function loadStochRsi(){
+ try{
+  const res=await fetch(`/api/market-history?symbol=${encodeURIComponent(symbol)}&resolution=5m&limit=100&_=${Date.now()}`,{cache:'no-store'});
+  if(!res.ok)throw Error('history unavailable');
+  const d=await res.json();const rows=Array.isArray(d.rows)?d.rows:[];
+  const closes=rows.map(r=>num(r.close)).filter(v=>v!==null);
+  if(closes.length<30)throw Error('not enough candles');
+  const rsis=[];
+  for(let i=14;i<closes.length;i++){
+   let gain=0,loss=0;for(let j=i-13;j<=i;j++){const delta=closes[j]-closes[j-1];if(delta>0)gain+=delta;else loss-=delta;}
+   const avgGain=gain/14,avgLoss=loss/14;rsis.push(avgLoss===0?100:100-(100/(1+avgGain/avgLoss)));
+  }
+  const recent=rsis.slice(-14),lo=Math.min(...recent),hi=Math.max(...recent);
+  const val=hi===lo?50:((recent[recent.length-1]-lo)/(hi-lo))*100;
+  window.NAKSHATRA_STOCH_RSI=Number(val.toFixed(1));
+  const metric=[...document.querySelectorAll('#metrics > div')].find(el=>el.textContent.includes('Stochastic RSI'));
+  if(metric){const b=metric.querySelector('b');if(b)b.textContent=`${val.toFixed(1)} / 100`;const label=val>=80?'OVERBOUGHT':val<=20?'OVERSOLD':val>=55?'BULLISH MOMENTUM':val<=45?'BEARISH MOMENTUM':'SIDEWAYS';if(b){b.classList.remove('bull','bear','sideways');b.classList.add(val>=55?'bull':val<=45?'bear':'sideways')}metric.title=`Stochastic RSI (14): ${label}; extremes can persist in trends.`;}
+ }catch(e){window.NAKSHATRA_STOCH_RSI='Unavailable';const metric=[...document.querySelectorAll('#metrics > div')].find(el=>el.textContent.includes('Stochastic RSI'));if(metric){const b=metric.querySelector('b');if(b)b.textContent='Unavailable';}}
+}
+
 async function loadDay(ticker){
   const direct=num(ticker?.change_24h??ticker?.ltp_change_24h);
   if(direct!==null){
@@ -112,7 +134,7 @@ async function loadDay(ticker){
     set('dayChange','—');set('dayChangePct','1D data unavailable');
   }catch(e){set('dayChange','—');set('dayChangePct','1D data unavailable')}
 }
-async function load(){if(busy)return;busy=true;try{const r=await fetch(`/api/live?symbol=${encodeURIComponent(symbol)}&_=${Date.now()}`,{cache:'no-store'});const d=await r.json();if(d.status==='OK'){render(d);loadDay(d.ticker||{})}else{set('status','● DATA RISK');set('dataState','● DATA RISK');set('updateStatus',d.message||'Data unavailable')}}catch(e){set('status','● OFFLINE');set('dataState','● OFFLINE');set('updateStatus','Connection error')}finally{busy=false}}
+async function load(){if(busy)return;busy=true;try{const r=await fetch(`/api/live?symbol=${encodeURIComponent(symbol)}&_=${Date.now()}`,{cache:'no-store'});const d=await r.json();if(d.status==='OK'){render(d);loadDay(d.ticker||{});loadStochRsi()}else{set('status','● DATA RISK');set('dataState','● DATA RISK');set('updateStatus',d.message||'Data unavailable')}}catch(e){set('status','● OFFLINE');set('dataState','● OFFLINE');set('updateStatus','Connection error')}finally{busy=false}}
 async function scanner(){try{const r=await fetch('/api/scanner?_='+Date.now(),{cache:'no-store'});const d=await r.json();const arr=Array.isArray(d)?d:(d.markets||[]);$('scanner').innerHTML=arr.map(x=>`<div class="scanner-row"><b>${esc(x.symbol)}</b><span class="${biasClass(x.signal||x.recommendation||'WAIT')}">${esc(x.signal||x.recommendation||'WAIT')}</span><small>${esc(x.strength??x.confidence??'—')}</small></div>`).join('')||'No scanner data'}catch(e){$('scanner').textContent='Scanner unavailable'}}
 async function trades(){try{const r=await fetch('/api/history?_='+Date.now(),{cache:'no-store'});const d=await r.json();const arr=Array.isArray(d)?d:(d.history||[]);$('trades').innerHTML=(arr||[]).slice(-8).reverse().map(x=>`<tr><td>${esc(x.symbol)}</td><td>${esc(x.side)}</td><td>${esc(fmt(x.entry))}</td><td>${esc(fmt(x.pnl))}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">No trades yet</td></tr>';$('equitySummary').textContent=arr?.length?`${arr.length} recorded trades`:'No recorded trades'}catch(e){$('equitySummary').textContent='Trade history unavailable'}}
 async function searchProducts(q){clearTimeout(productTimer);if(!q||q.length<1){$('searchResults').innerHTML='';return}productTimer=setTimeout(async()=>{try{const r=await fetch(`/api/products?q=${encodeURIComponent(q)}`);const d=await r.json();$('searchResults').innerHTML=(d.products||[]).slice(0,8).map(p=>`<button class="result-item" data-symbol="${esc(p.symbol)}"><b>${esc(p.symbol)}</b><small>${esc(p.description||p.contract_type||'Delta product')}</small></button>`).join('')||'<div class="empty-search">No live Delta crypto found</div>';document.querySelectorAll('.result-item').forEach(b=>b.onclick=()=>selectSymbol(b.dataset.symbol))}catch(e){$('searchResults').innerHTML='<div class="empty-search">Search unavailable</div>'}},120)}
