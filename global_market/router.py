@@ -31,7 +31,7 @@ def _num(v):
     except (TypeError,ValueError): return None
 
 def _row(name,market,price,change,volume,source,status='OK',note=None):
-    return {'exchange':name,'market':market,'price':_num(price),'change_24h_pct':_num(change),'volume_24h':_num(volume),'source':source,'status':status,'note':note,'open_interest':None,'open_interest_change_pct':None,'funding_rate_pct':None,'options_open_interest':None}
+    return {'exchange':name,'market':market,'price':_num(price),'change_24h_pct':_num(change),'volume_24h':_num(volume),'source':source,'status':status,'note':note,'open_interest':None,'open_interest_change_pct':None,'funding_rate_pct':None,'options_open_interest':None,'options_call_oi':None,'options_put_oi':None,'options_call_volume':None,'options_put_volume':None}
 
 def _binance_spot(symbol):
     p=_get_json_fallback(['https://api.binance.com/api/v3/ticker/24hr','https://api1.binance.com/api/v3/ticker/24hr'],{'symbol':symbol})
@@ -55,13 +55,15 @@ def _binance_futures(symbol):
     return row
 
 def _coinbase(symbol):
-    product='BTC-USD' if symbol.startswith('BTC') else 'ETH-USD'
+    base = symbol.upper().replace('USDT','').replace('USD','')
+    product = f'{base}-USD'
     ticker=_get(f'https://api.exchange.coinbase.com/products/{product}/ticker'); stats=_get(f'https://api.exchange.coinbase.com/products/{product}/stats')
     last=_num(ticker.get('price')); op=_num(stats.get('open')); change=(last/op-1)*100 if last and op else None
     return _row('Coinbase','Spot',last,change,stats.get('volume'),f'Coinbase Exchange {product}')
 
 def _kraken(symbol):
-    pair='XBTUSD' if symbol.startswith('BTC') else 'ETHUSD'; p=_get('https://api.kraken.com/0/public/Ticker',{'pair':pair})
+    base=symbol.upper().replace('USDT','').replace('USD','')
+    pair='XBTUSD' if base=='BTC' else f'{base}USD'; p=_get('https://api.kraken.com/0/public/Ticker',{'pair':pair})
     if p.get('error'): raise ValueError('Kraken: '+', '.join(p['error']))
     t=next(iter((p.get('result') or {}).values()),{}); last=_num((t.get('c') or [None])[0]); op=_num(t.get('o')); ch=(last/op-1)*100 if last and op else None
     return _row('Kraken','Spot',last,ch,_num((t.get('v') or [None,None])[1]),f'Kraken public ticker {pair}')
@@ -82,7 +84,7 @@ def _bybit(symbol):
     return row
 
 def _okx(symbol):
-    base='BTC' if symbol.startswith('BTC') else 'ETH'; inst=f'{base}-USDT-SWAP'
+    base=symbol.upper().replace('USDT','').replace('USD',''); inst=f'{base}-USDT-SWAP'
     p=_get('https://www.okx.com/api/v5/market/ticker',{'instId':inst})
     if p.get('code') not in ('0',0,None): raise ValueError(str(p.get('msg','OKX API error')))
     t=(p.get('data') or [{}])[0]; last=_num(t.get('last')); op=_num(t.get('open24h')); ch=(last/op-1)*100 if last and op else None
@@ -95,7 +97,42 @@ def _okx(symbol):
     except Exception: pass
     return row
 
-PROVIDERS=[_binance_spot,_binance_futures,_coinbase,_kraken,_bybit,_okx]
+
+def _deribit(symbol):
+    """Public Deribit perpetual + aggregate option call/put positioning for BTC/ETH."""
+    base=symbol.upper().replace('USDT','').replace('USD','')
+    if base not in ('BTC','ETH'):
+        raise ValueError('Deribit public options/perpetual adapter supports BTC and ETH only')
+    t=_get(f'https://www.deribit.com/api/v2/public/ticker',{'instrument_name':f'{base}-PERPETUAL'})
+    result=t.get('result') or {}
+    stats=result.get('stats') or {}
+    pct_change=_num(stats.get('price_change'))
+    row=_row('Deribit','Perpetual',result.get('last_price'),pct_change,result.get('stats',{}).get('volume'),f'Deribit public {base}-PERPETUAL')
+    last=_num(result.get('last_price'))
+    row['open_interest']=_num(result.get('open_interest'))
+    row['funding_rate_pct']=(_num(result.get('current_funding')) or _num(result.get('funding_8h')) or 0)*100
+    try:
+        q=_get('https://www.deribit.com/api/v2/public/get_book_summary_by_currency',{'currency':base,'kind':'option'})
+        items=(q.get('result') or [])
+        call_oi=put_oi=call_vol=put_vol=0.0
+        for item in items:
+            name=str(item.get('instrument_name') or '')
+            oi=_num(item.get('open_interest')) or 0.0
+            vol=_num(item.get('volume')) or 0.0
+            if name.endswith('-C'):
+                call_oi+=oi; call_vol+=vol
+            elif name.endswith('-P'):
+                put_oi+=oi; put_vol+=vol
+        row['options_call_oi']=call_oi or None
+        row['options_put_oi']=put_oi or None
+        row['options_open_interest']=(call_oi+put_oi) or None
+        row['options_call_volume']=call_vol or None
+        row['options_put_volume']=put_vol or None
+    except Exception as exc:
+        row['note']='Perpetual live; option summary unavailable: '+str(exc)[:100]
+    return row
+
+PROVIDERS=[_binance_spot,_binance_futures,_coinbase,_kraken,_bybit,_okx,_deribit]
 def _direction(v):
     if v is None:return 'UNCONFIRMED'
     if v>=0.25:return 'BULLISH'
@@ -145,11 +182,24 @@ def _build_snapshot(symbol):
     risk_score=int(round(min(100,risk_score)))
     risk_label='HIGH' if risk_score>=65 else 'ELEVATED' if risk_score>=35 else 'LOW'
     deriv=[r for r in rows if r.get('open_interest') is not None or r.get('funding_rate_pct') is not None]
-    smart={'open_interest':next((r['open_interest'] for r in deriv if r.get('open_interest') is not None),None),'open_interest_source':next((r['exchange'] for r in deriv if r.get('open_interest') is not None),None),'funding_rate_pct':next((r['funding_rate_pct'] for r in deriv if r.get('funding_rate_pct') is not None),None),'funding_source':next((r['exchange'] for r in deriv if r.get('funding_rate_pct') is not None),None),'order_book_imbalance':None,'rows':[{k:r.get(k) for k in ('exchange','market','open_interest','open_interest_change_pct','funding_rate_pct','options_open_interest','status','note')} for r in rows if r['market'] in ('USD-M Futures','USDT Perpetual') or r['exchange']=='Binance'],'note':'OI change is shown only where a provider returns comparable snapshots. Rising OI means leverage/positions are building, not automatically bullish; combine with price direction and funding. Option OI is unavailable in these public adapters.'}
+    smart={'open_interest':next((r['open_interest'] for r in deriv if r.get('open_interest') is not None),None),'open_interest_source':next((r['exchange'] for r in deriv if r.get('open_interest') is not None),None),'funding_rate_pct':next((r['funding_rate_pct'] for r in deriv if r.get('funding_rate_pct') is not None),None),'funding_source':next((r['exchange'] for r in deriv if r.get('funding_rate_pct') is not None),None),'order_book_imbalance':None,'rows':[{**{k:r.get(k) for k in ('exchange','market','open_interest','open_interest_change_pct','funding_rate_pct','options_open_interest','options_call_oi','options_put_oi','options_call_volume','options_put_volume','status','note')},'interpretation':('OI and price both rising: bullish participation possible' if r.get('open_interest_change_pct') is not None and r.get('open_interest_change_pct')>=1 and r.get('change_24h_pct') is not None and r.get('change_24h_pct')>=0.25 else 'Price falling while OI rises: bearish pressure / short build possible' if r.get('open_interest_change_pct') is not None and r.get('open_interest_change_pct')>=1 and r.get('change_24h_pct') is not None and r.get('change_24h_pct')<=-0.25 else 'OI falling: position unwind; direction depends on price' if r.get('open_interest_change_pct') is not None and r.get('open_interest_change_pct')<=-1 else 'SIDEWAYS / NO STRONG OI DIRECTION' if r.get('status')=='OK' else 'Feed unavailable')} for r in rows if r['market'] in ('USD-M Futures','USDT Perpetual') or r['exchange'] in ('Binance','Deribit')],'note':'OI change is shown only where a provider returns comparable snapshots. Rising OI means positions are building, not automatically bullish; compare price direction and funding. Deribit public option call/put OI and volume are shown when available.'}
     if smart['open_interest_change_pct'] if 'open_interest_change_pct' in smart else False: pass
     # Explain what the observed derivatives combination means without overstating it.
     oi_changes=[r.get('open_interest_change_pct') for r in rows if r.get('open_interest_change_pct') is not None]
     oi_ch=_median(oi_changes)
+    if oi_ch is None or med is None:
+        smart_bias='UNCONFIRMED'; smart_bias_note='Not enough comparable OI-change and price-change data to classify smart-money direction.'
+    elif oi_ch >= 1 and med >= 0.25:
+        smart_bias='BULLISH'; smart_bias_note='Price and OI are both rising: bullish participation is possible, but crowded-long/funding risk still needs monitoring.'
+    elif oi_ch >= 1 and med <= -0.25:
+        smart_bias='BEARISH'; smart_bias_note='Price is falling while OI rises: fresh shorts or trapped longs may be building; squeeze direction is not confirmed.'
+    elif oi_ch <= -1 and med <= -0.25:
+        smart_bias='BEARISH'; smart_bias_note='Price and OI are falling: bearish move with position reduction; continuation is not guaranteed.'
+    elif oi_ch <= -1 and med >= 0.25:
+        smart_bias='BULLISH'; smart_bias_note='Price rises while OI falls: short-covering may be contributing; check spot volume for confirmation.'
+    else:
+        smart_bias='SIDEWAYS'; smart_bias_note='Available OI/price changes do not show a strong aligned directional build-up.'
+    smart['bias']=smart_bias; smart['bias_note']=smart_bias_note
     if oi_ch is None: deriv_effect='OI change unavailable: cannot confirm fresh leverage build-up.'
     elif oi_ch>1 and (med or 0)>0: deriv_effect='Price and OI both rising: new positions may be joining the move; crowded-long risk still needs funding/liquidation confirmation.'
     elif oi_ch>1 and (med or 0)<0: deriv_effect='Price falling while OI rises: new shorts or trapped longs may be building; squeeze direction remains unconfirmed.'
@@ -164,14 +214,16 @@ def _build_snapshot(symbol):
     elif fund<-0.03: smart['funding_effect']='Negative funding: short positioning may be crowded; upside squeeze risk can rise if price reverses.'
     else: smart['funding_effect']='Funding is not extreme by this simple threshold; funding alone is not a direction signal.'
     now=datetime.now(timezone.utc).isoformat()
-    return {'status':'OK' if available else 'DATA LIMITED','symbol':symbol,'base_asset':'BTC' if symbol.startswith('BTC') else 'ETH','updated_at':now,'cache_seconds':CACHE_SECONDS,'provider_count':len(rows),'available_count':len(available),'global_mean_price':avg,'median_change_24h_pct':med,'consensus':consensus,'consensus_ratio':round(ratio,1) if ratio is not None else None,'exchanges':rows,'divergences':divergences,'early_warning':{'level':level,'title':title,'direction':alertdir,'reasons':reasons,'method':'24h ticker thresholds + cross-exchange spread; cannot predict second-by-second moves.'},'smart_money':smart,'liquidation_risk':{'status':'UNCONFIRMED','long_short_squeeze':'NO LIVE LIQUIDATION FEED','effect':'A squeeze needs forced liquidations plus price/positioning evidence. Rising OI and funding are context only; without a live liquidation stream, long/short squeeze direction cannot be confirmed.','note':'Liquidation stream is not connected. Treat as unconfirmed, not as zero risk.'},'probability':{'up_pct':None,'down_pct':None,'status':'HEURISTIC RISK SCORE — NOT PROBABILITY','risk_score':risk_score,'risk_label':risk_label,'direction_bias':consensus,'note':f'Monitoring score {risk_score}/100 ({risk_label}) from 24h move, cross-exchange spread and agreement. It is NOT a statistically calibrated probability; direction bias is {consensus}.'},'definitions':{'intraday_high':'HIGH means elevated volatility/activity, not bullish. Direction comes from each timeframe signal: green bullish, red bearish, orange sideways/neutral.','divergence':'Price spread between exchanges can reflect liquidity, timing, or venue-specific flow; large spread may increase execution/slippage risk, not prove manipulation.','volume':'Rising volume with price move supports participation; price move on low volume is less confirmed. Volume alone does not tell future direction.'}}
+    return {'status':'OK' if available else 'DATA LIMITED','symbol':symbol,'base_asset':symbol.upper().replace('USDT','').replace('USD',''),'updated_at':now,'cache_seconds':CACHE_SECONDS,'provider_count':len(rows),'available_count':len(available),'global_mean_price':avg,'median_change_24h_pct':med,'consensus':consensus,'consensus_ratio':round(ratio,1) if ratio is not None else None,'exchanges':rows,'divergences':divergences,'divergence_bias':('UNCONFIRMED' if len(available)<2 else 'SIDEWAYS' if not divergences else 'BEARISH' if (med or 0)<0 and any(x['deviation_pct']<=-0.20 for x in divergences) else 'BULLISH' if (med or 0)>0 and any(x['deviation_pct']>=0.20 for x in divergences) else 'SIDEWAYS'),'early_warning':{'level':level,'title':title,'direction':alertdir,'reasons':reasons,'method':'24h ticker thresholds + cross-exchange spread; cannot predict second-by-second moves.'},'smart_money':smart,'liquidation_risk':{'status':'UNCONFIRMED','bias':('BEARISH RISK CONTEXT' if fund is not None and fund>0.03 and (med or 0)<0 else 'BULLISH RISK CONTEXT' if fund is not None and fund<-0.03 and (med or 0)>0 else 'SIDEWAYS / UNCONFIRMED'),'long_short_squeeze':'NO LIVE LIQUIDATION FEED','effect':'A squeeze needs forced liquidations plus price/positioning evidence. Rising OI and funding are context only; without a live liquidation stream, long/short squeeze direction cannot be confirmed.','note':'Liquidation stream is not connected. Treat as unconfirmed, not as zero risk.'},'probability':{'up_pct':None,'down_pct':None,'status':'HEURISTIC RISK SCORE — NOT PROBABILITY','risk_score':risk_score,'risk_label':risk_label,'direction_bias':consensus,'note':f'Monitoring score {risk_score}/100 ({risk_label}) from 24h move, cross-exchange spread and agreement. It is NOT a statistically calibrated probability; direction bias is {consensus}.'},'definitions':{'intraday_high':'HIGH means elevated volatility/activity, not bullish. Direction comes from each timeframe signal: green bullish, red bearish, orange sideways/neutral.','divergence':'Price spread between exchanges can reflect liquidity, timing, or venue-specific flow; large spread may increase execution/slippage risk, not prove manipulation.','volume':'Rising volume with price move supports participation; price move on low volume is less confirmed. Volume alone does not tell future direction.'}}
 
 @router.get('/snapshot')
 def global_snapshot(symbol:str=Query('BTCUSDT'),force:bool=Query(False)):
     requested=symbol.upper().replace('/','').replace('-','')
     if requested in ('BTCUSD','BTCUSDT','XBTUSD'): normalized='BTCUSDT'
     elif requested in ('ETHUSD','ETHUSDT','ETHUSDTPERP'): normalized='ETHUSDT'
-    else: return {'status':'UNSUPPORTED SYMBOL','symbol':requested,'available_count':0,'provider_count':len(PROVIDERS),'exchanges':[],'consensus':'UNCONFIRMED','early_warning':{'level':'DATA LIMITED','title':'Global data unavailable for this symbol','direction':'UNCONFIRMED','reasons':['No global provider adapter is configured for this symbol.'],'method':'No stale BTC/ETH data is reused for unsupported symbols.'}}
+    elif requested.endswith('USD') and len(requested)>3: normalized=requested[:-3]+'USDT'
+    elif requested.endswith('USDT') and len(requested)>5: normalized=requested
+    else: return {'status':'UNSUPPORTED SYMBOL','symbol':requested,'base_asset':requested,'available_count':0,'provider_count':len(PROVIDERS),'exchanges':[],'consensus':'UNCONFIRMED','early_warning':{'level':'DATA LIMITED','title':'Global data unavailable for this symbol','direction':'UNCONFIRMED','reasons':['A supported crypto quote symbol is required.'],'method':'No stale BTC/ETH data is reused for unsupported symbols.'}}
     now=time.time()
     with _lock:
         cached=_cache.get(normalized)
