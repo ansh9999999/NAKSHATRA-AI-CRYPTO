@@ -14,6 +14,8 @@ The trading/analysis engine is not changed. This file:
 from contextlib import asynccontextmanager
 import time
 import math
+import json
+from decimal import Decimal, InvalidOperation
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -34,6 +36,8 @@ CACHE_TTL = 8
 PRODUCTS_TTL = 300
 _analysis_cache = {}
 _products_cache = {"time": 0, "items": []}
+_product_price_cache = {}
+PRODUCT_PRICE_TTL = 10
 
 
 def _json_safe(value):
@@ -84,6 +88,42 @@ def _product_row(row):
         "trading_status": trading_status,
     }
 
+
+
+def _delta_display_price(symbol: str):
+    """Return Delta's ticker price as an exact decimal string for search results.
+
+    Parse JSON decimal tokens as Decimal so the browser receives the full precision
+    provided by Delta instead of a rounded JavaScript/Python float.
+    """
+    symbol = str(symbol or "").upper().strip()
+    if not symbol:
+        return None
+    now = time.time()
+    cached = _product_price_cache.get(symbol)
+    if cached and now - cached[0] < PRODUCT_PRICE_TTL:
+        return cached[1]
+    try:
+        response = session.get(f"{BASE_URL}/tickers/{symbol}", timeout=5)
+        response.raise_for_status()
+        payload = json.loads(response.text, parse_float=Decimal, parse_int=Decimal)
+        row = payload.get("result") or {}
+        raw = row.get("close")
+        if raw is None or raw == "":
+            raw = row.get("mark_price")
+        if raw is None or raw == "":
+            raw = row.get("spot_price")
+        if raw is None or raw == "":
+            return None
+        if isinstance(raw, Decimal):
+            price = format(raw, "f")
+        else:
+            price = str(raw).strip()
+        _product_price_cache[symbol] = (now, price)
+        return price
+    except Exception as exc:
+        logger.debug("Delta search price unavailable for %s: %s", symbol, exc)
+        return None
 
 def get_product(symbol):
     """Fetch and validate one product directly from Delta.
@@ -311,7 +351,14 @@ def api_products(q: str = ""):
             or query in str(x.get("description", "")).upper()
             or query in str(x.get("underlying", "")).upper()
         ]
-    return {"status": "OK", "count": len(items), "products": items[:50]}
+    # Attach live prices to only the first eight visible search results. Prices are
+    # cached briefly to avoid hammering Delta while the user types.
+    visible = []
+    for item in items[:8]:
+        row = dict(item)
+        row["price"] = _delta_display_price(row["symbol"])
+        visible.append(row)
+    return {"status": "OK", "count": len(items), "products": visible}
 
 @app.get("/api/live")
 def api_live(symbol: str = "BTCUSD", force: bool = False):
@@ -434,6 +481,26 @@ def trades():
 def open_trades():
     data = get_open_trades()
     return {"count": len(data), "trades": data}
+
+
+@app.get("/api/market-history")
+def api_market_history(symbol: str = "BTCUSD", resolution: str = "5m", limit: int = 100):
+    """Return Delta candle history for dashboard indicators such as Stochastic RSI."""
+    safe_symbol = str(symbol or "BTCUSD").upper().strip()
+    if safe_symbol not in ("BTCUSD", "ETHUSD"):
+        return {"status": "UNAVAILABLE", "rows": [], "message": "Unsupported Delta crypto symbol"}
+    safe_resolution = str(resolution or "5m").lower().strip()
+    if safe_resolution not in ("1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d", "1w"):
+        return {"status": "UNAVAILABLE", "rows": [], "message": "Unsupported candle resolution"}
+    safe_limit = max(20, min(int(limit or 100), 500))
+    try:
+        frame = get_history(safe_symbol, safe_resolution, safe_limit)
+        if frame is None or frame.empty:
+            return {"status": "UNAVAILABLE", "symbol": safe_symbol, "rows": [], "message": "No candles returned by Delta history provider"}
+        rows = frame.to_dict(orient="records")
+        return {"status": "OK", "symbol": safe_symbol, "resolution": safe_resolution, "rows": _json_safe(rows)}
+    except Exception as exc:
+        return {"status": "UNAVAILABLE", "symbol": safe_symbol, "rows": [], "message": str(exc)[:160]}
 
 
 @app.get("/api/history")
