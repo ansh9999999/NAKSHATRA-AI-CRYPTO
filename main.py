@@ -380,9 +380,14 @@ def api_live(symbol: str = "BTCUSD", force: bool = False):
     except Exception as exc:
         logger.warning("Ticker failed %s: %s", symbol, exc)
 
+    # Live ticker and candle-analysis availability are separate. For searchable
+    # Delta contracts without candle history, still return the real ticker so the
+    # UI can show its exact price and mark analysis fields unavailable.
+    response_status = "OK" if ticker is not None else (
+        analysis.get("status", "UNKNOWN") if isinstance(analysis, dict) else "UNKNOWN"
+    )
     return _json_safe({
-        "status": analysis.get("status", "UNKNOWN")
-            if isinstance(analysis, dict) else "UNKNOWN",
+        "status": response_status,
         "symbol": symbol,
         "ticker": ticker,
         "analysis": analysis,
