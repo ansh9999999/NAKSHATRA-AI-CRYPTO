@@ -185,3 +185,10 @@ small,.eyebrow,.market-row small,.plan-grid small{font-size:15px!important;color
   .selector .quick{gap:8px}
   .symbol{min-height:54px!important;font-size:17px!important}
 }
+
+/* Search results: full-precision Delta prices, aligned for mobile readability. */
+.search-results .result-item{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;padding:12px 14px;border:0;border-bottom:1px solid #392653;background:#100b20;color:#f4eaff;cursor:pointer;}
+.search-results .result-main{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.search-results .result-main b{font-size:15px;color:#f4c8ff;}
+.search-results .result-main small{font-size:12px;color:#b9a8d5;text-transform:none;letter-spacing:0;white-space:normal;}
+.search-results .result-price{font-size:14px;color:#53efb1;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;}
