@@ -16,6 +16,8 @@ It is NOT broker/delta.py.
 """
 
 import time
+import json
+from decimal import Decimal, InvalidOperation
 import requests
 import pandas as pd
 
@@ -103,29 +105,35 @@ def get_ticker(symbol="BTCUSD"):
 
         response.raise_for_status()
 
-        payload = response.json()
+        payload = json.loads(response.text, parse_float=Decimal, parse_int=Decimal)
 
         result = payload.get("result")
 
         if not result:
             return None
 
-        price = (
-            result.get("close")
-            or result.get("mark_price")
-            or result.get("spot_price")
-        )
-
+        price = result.get("close")
+        if price is None or price == "": price = result.get("mark_price")
+        if price is None or price == "": price = result.get("spot_price")
+        opening, high, low = result.get("open"), result.get("high"), result.get("low")
+        try:
+            p_dec = Decimal(str(price)) if price is not None else None
+            o_dec = Decimal(str(opening)) if opening not in (None, "", 0, "0") else None
+            change_pct = ((p_dec-o_dec)/o_dec*Decimal("100")) if p_dec is not None and o_dec else None
+        except (InvalidOperation, ZeroDivisionError, TypeError):
+            change_pct = None
         return {
             "symbol": result.get("symbol", symbol),
-            "price": _float(price),
+            "price": _float(price), "price_exact": str(price) if price is not None else None,
             "mark_price": _float(result.get("mark_price", price)),
             "volume": _float(result.get("volume", 0)),
-            "open": _float(result.get("open", 0)),
-            "high": _float(result.get("high", 0)),
-            "low": _float(result.get("low", 0)),
+            "open": _float(opening), "open_exact": str(opening) if opening is not None else None,
+            "high": _float(high), "high_exact": str(high) if high is not None else None,
+            "low": _float(low), "low_exact": str(low) if low is not None else None,
             "oi": _float(result.get("oi", 0)),
             "change_24h": _float(result.get("ltp_change_24h", 0)),
+            "change_24h_abs": _float(result.get("ltp_change_24h", 0)),
+            "change_24h_pct": str(change_pct) if change_pct is not None else None,
             "ltp_change_24h": _float(result.get("ltp_change_24h", 0)),
             "timestamp": result.get("timestamp"),
         }
