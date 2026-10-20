@@ -215,3 +215,21 @@ small,.eyebrow,.market-row small,.plan-grid small{font-size:15px!important;color
 @media(max-width:620px){.price-line{grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:7px}.market-hero .price{font-size:clamp(26px,6.7vw,38px)!important;letter-spacing:-1.1px!important}.day-change{padding:8px!important}.day-change b{font-size:16px!important}.day-change .market-effect{font-size:11px!important}.collapse-toggle{width:32px;height:32px;min-width:32px}.section-head,.global-card-head{padding-right:38px}}
 
 .global-market-wrap{position:relative}.global-title-row{position:relative;padding-right:42px}.global-market-wrap.is-collapsed>.global-grid,.global-market-wrap.is-collapsed>section.global-card,.global-market-wrap.is-collapsed>.global-footnote{display:none!important}.global-title-row .collapse-toggle{top:4px}
+
+/* v7.1: high-visibility AI rationale and TradingView calendar */
+.why-ai-card .section-head h2{font-size:clamp(20px,2.2vw,25px)}
+.why-ai-card .section-head h2 span{font-size:inherit}
+.why-ai-card .reason-list{grid-template-columns:1fr;gap:9px}
+.why-ai-card .reason-list .why-reason{font-size:17px;line-height:1.55;padding:13px 14px;border-left-width:4px;overflow-wrap:anywhere}
+.why-ai-card .reason-list .why-reason.bull{border-left-color:var(--green)}
+.why-ai-card .reason-list .why-reason.bear{border-left-color:var(--red)}
+.why-ai-card .reason-list .why-reason.sideways{border-left-color:var(--orange)}
+.calendar-event .event-main strong{font-size:16px;line-height:1.45;color:#f0c8ff}
+.calendar-event .event-time{font-size:14px;line-height:1.5}
+.calendar-event .event-main small{font-size:14px;line-height:1.55}
+.calendar-impact{font-size:13px;font-weight:900;letter-spacing:.3px;margin-top:5px}
+.calendar-values{color:#d8c8f5!important;font-weight:700}
+.calendar-status{padding:15px;border:1px solid #7950a9;border-radius:12px;background:#170d2c;font-size:16px;line-height:1.6}
+.calendar-status p{margin:8px 0 12px;color:#e5d8fb}
+.calendar-status a{color:#8fe9ff;font-weight:800;text-decoration:underline}
+@media(max-width:620px){.why-ai-card .reason-list .why-reason{font-size:17px;padding:13px;line-height:1.55}.calendar-event .event-main strong{font-size:16px}.calendar-event .event-time,.calendar-event .event-main small{font-size:14px}.calendar-event .event-right{min-width:55px}.calendar-event .event-right b{font-size:12px}}
