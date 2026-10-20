@@ -233,3 +233,13 @@ small,.eyebrow,.market-row small,.plan-grid small{font-size:15px!important;color
 .calendar-status p{margin:8px 0 12px;color:#e5d8fb}
 .calendar-status a{color:#8fe9ff;font-weight:800;text-decoration:underline}
 @media(max-width:620px){.why-ai-card .reason-list .why-reason{font-size:17px;padding:13px;line-height:1.55}.calendar-event .event-main strong{font-size:16px}.calendar-event .event-time,.calendar-event .event-main small{font-size:14px}.calendar-event .event-right{min-width:55px}.calendar-event .event-right b{font-size:12px}}
+
+/* v7.2: extra-large, high-contrast text throughout Why AI Says */
+.why-ai-card{padding:17px!important}
+.why-ai-card .section-head h2{font-size:clamp(25px,3vw,31px)!important;line-height:1.35!important;font-weight:900!important;color:#f4dcff!important}
+.why-ai-card .section-head h2 span{font-size:inherit!important;font-weight:900!important}
+.why-ai-card .reason-list{grid-template-columns:minmax(0,1fr)!important;gap:12px!important}
+.why-ai-card .reason-list .why-reason,.why-ai-card .reason-list .why-reason *{font-size:21px!important;line-height:1.65!important;letter-spacing:.1px!important}
+.why-ai-card .reason-list .why-reason{padding:16px 17px!important;font-weight:650!important;color:#ffffff!important;background:#160e29!important;border-left-width:5px!important;overflow-wrap:anywhere!important}
+.why-ai-card .reason-list .why-reason small,.why-ai-card .reason-list .why-reason span{color:#f2e7ff!important;text-transform:none!important}
+@media(max-width:620px){.why-ai-card{padding:13px!important}.why-ai-card .section-head h2{font-size:25px!important}.why-ai-card .reason-list .why-reason,.why-ai-card .reason-list .why-reason *{font-size:20px!important;line-height:1.65!important}.why-ai-card .reason-list .why-reason{padding:15px 13px!important}}
