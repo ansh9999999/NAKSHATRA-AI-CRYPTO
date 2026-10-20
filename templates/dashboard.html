@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>NAKSHATRA AI v7.1</title>
-<link rel="stylesheet" href="/static/style.css?v=7.2.0">
+<link rel="stylesheet" href="/static/style.css?v=7.3.0">
 </head>
 <body><div class="container">
 <header class="topbar">
@@ -25,6 +25,14 @@
 </section>
 
 <section class="tf-strip card"><div><small>5M</small><b id="tf5">—</b></div><div><small>15M</small><b id="tf15">—</b></div><div><small>1H</small><b id="tf1h">—</b></div><div><small>4H</small><b id="tf4h">—</b></div><div><small>1D</small><b id="tf1d">—</b></div></section>
+
+<section class="card early-warning-card" id="intradayEarlyWarning">
+  <div class="section-head"><div><span class="eyebrow">PRICE ACTION • VOLUME • SUPPORT / RESISTANCE</span><h2>⚡ Intraday Early Warning</h2></div><span id="ewStatus" class="live-pill">Checking live candles…</span></div>
+  <div class="ew-main"><strong id="ewSignal">Waiting for candle data…</strong><span id="ewBias">—</span></div>
+  <div class="ew-levels"><div><small>LIVE PRICE</small><b id="ewPrice">—</b></div><div><small>INTRADAY SUPPORT</small><b id="ewSupport">—</b></div><div><small>INTRADAY RESISTANCE</small><b id="ewResistance">—</b></div><div><small>VOLUME VS BASELINE</small><b id="ewVolume">—</b></div></div>
+  <div class="ew-reasons" id="ewReasons">Loading recent price action and volume…</div>
+  <p class="gm-note" id="ewMethod">Uses candle structure, recent swing levels and volume expansion only. No RSI, MACD, EMA or Stochastic RSI in this alert engine.</p>
+</section>
 
 <main class="dashboard-grid">
 <div class="main-col">
@@ -68,4 +76,4 @@
   <div class="global-footnote">Global monitor is read-only and separate from Delta trading logic. Exchange endpoints can be rate-limited or region-blocked; unavailable sources are shown explicitly. Current warning uses 24h ticker thresholds, not second-by-second prediction.</div>
 </section>
 <footer><span>NAKSHATRA AI v4.0 • Market data from Delta Exchange</span><span>Auto refresh 10s</span></footer>
-</div><script src="/static/app.js?v=7.1.0"></script><link rel="stylesheet" href="/static/global-market.css?v=7.0.0"><script src="/static/global-market.js?v=7.0.0"></script></body></html>
+</div><script src="/static/app.js?v=7.3.0"></script><link rel="stylesheet" href="/static/global-market.css?v=7.0.0"><script src="/static/global-market.js?v=7.0.0"></script></body></html>
