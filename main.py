@@ -105,22 +105,23 @@ def _delta_display_price(symbol: str):
         return cached[1]
     try:
         response = session.get(f"{BASE_URL}/tickers/{symbol}", timeout=5)
-        response.raise_for_status()
-        payload = json.loads(response.text, parse_float=Decimal, parse_int=Decimal)
-        row = payload.get("result") or {}
-        raw = row.get("close")
-        if raw is None or raw == "":
-            raw = row.get("mark_price")
-        if raw is None or raw == "":
-            raw = row.get("spot_price")
-        if raw is None or raw == "":
-            return None
-        if isinstance(raw, Decimal):
-            price = format(raw, "f")
-        else:
-            price = str(raw).strip()
-        _product_price_cache[symbol] = (now, price)
-        return price
+        if response.ok:
+            payload = json.loads(response.text, parse_float=Decimal, parse_int=Decimal)
+            row = payload.get("result") or {}
+            if isinstance(row, list):
+                row = next((x for x in row if str(x.get("symbol", "")).upper() == symbol), {})
+            raw = row.get("close") or row.get("mark_price") or row.get("spot_price")
+            if raw not in (None, "", 0, "0"):
+                price = format(raw, "f") if isinstance(raw, Decimal) else str(raw).strip()
+                _product_price_cache[symbol] = (now, price)
+                return price
+        # Use the same exact-symbol ticker fallback as the live market endpoint.
+        ticker = get_ticker(symbol)
+        raw = ticker.get("price_exact") if ticker else None
+        if raw not in (None, "", "0", "0.0"):
+            _product_price_cache[symbol] = (now, str(raw))
+            return str(raw)
+        return None
     except Exception as exc:
         logger.debug("Delta search price unavailable for %s: %s", symbol, exc)
         return None
@@ -359,7 +360,7 @@ def api_products(q: str = ""):
         elif query.endswith("USD"):
             direct_candidates.append(query + "T")
         elif query.isalpha() and 2 <= len(query) <= 12:
-            direct_candidates.extend([query + "USD", query + "USDT"])
+            direct_candidates.extend([query + "USD", query + "USDT", query + "USDTM"])
         known = {x["symbol"] for x in items}
         for candidate in direct_candidates:
             if candidate in known:
