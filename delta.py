@@ -17,6 +17,7 @@ It is NOT broker/delta.py.
 
 import time
 import json
+import re
 from decimal import Decimal, InvalidOperation
 import requests
 import pandas as pd
@@ -89,69 +90,94 @@ def _timestamp_seconds(value):
 # ==========================================================
 
 def get_ticker(symbol="BTCUSD"):
-    """Fetch one Delta ticker; fall back to the public ticker list if direct lookup fails."""
+    """Fetch a Delta India ticker with exact-symbol matching and safe fallbacks."""
     symbol = str(symbol or "BTCUSD").upper().strip()
 
     def normalize(result):
         if isinstance(result, list):
-            result = next((x for x in result if str(x.get("symbol", "")).upper() == symbol), None)
+            result = next((x for x in result if isinstance(x, dict) and str(x.get("symbol", "")).upper() == symbol), None)
         if not isinstance(result, dict) or not result:
             return None
+        if result.get("symbol") and str(result.get("symbol")).upper() != symbol:
+            return None
         price = result.get("close")
-        if price is None or price == "": price = result.get("mark_price")
-        if price is None or price == "": price = result.get("spot_price")
+        if price in (None, ""):
+            price = result.get("mark_price")
+        if price in (None, ""):
+            price = result.get("spot_price")
         opening, high, low = result.get("open"), result.get("high"), result.get("low")
         try:
-            p_dec = Decimal(str(price)) if price is not None else None
+            p_dec = Decimal(str(price)) if price not in (None, "") else None
             o_dec = Decimal(str(opening)) if opening not in (None, "", 0, "0") else None
-            change_pct = ((p_dec-o_dec)/o_dec*Decimal("100")) if p_dec is not None and o_dec else None
+            delta_raw = result.get("ltp_change_24h")
+            delta_dec = Decimal(str(delta_raw)) if delta_raw not in (None, "") else None
+            if p_dec is not None and o_dec is not None and o_dec != 0:
+                change_abs = p_dec - o_dec
+                change_pct = change_abs / o_dec * Decimal("100")
+            elif p_dec is not None and delta_dec is not None:
+                change_abs = delta_dec
+                prior = p_dec - delta_dec
+                change_pct = (delta_dec / prior * Decimal("100")) if prior != 0 else None
+            else:
+                change_abs, change_pct = delta_dec, None
         except (InvalidOperation, ZeroDivisionError, TypeError):
-            change_pct = None
+            change_abs, change_pct = None, None
+        def exact(v):
+            return format(v, "f") if isinstance(v, Decimal) else (str(v) if v is not None else None)
         return {
             "symbol": result.get("symbol", symbol),
-            "price": _float(price), "price_exact": str(price) if price is not None else None,
+            "price": _float(price), "price_exact": exact(price),
             "mark_price": _float(result.get("mark_price", price)),
-            "volume": _float(result.get("volume", 0)),
-            "open": _float(opening), "open_exact": str(opening) if opening is not None else None,
-            "high": _float(high), "high_exact": str(high) if high is not None else None,
-            "low": _float(low), "low_exact": str(low) if low is not None else None,
-            "oi": _float(result.get("oi", 0)),
-            "change_24h": _float(result.get("ltp_change_24h", 0)),
-            "change_24h_abs": _float(result.get("ltp_change_24h", 0)),
-            "change_24h_pct": str(change_pct) if change_pct is not None else None,
-            "ltp_change_24h": _float(result.get("ltp_change_24h", 0)),
+            "volume": _float(result.get("volume", result.get("volume_24h", 0))),
+            "open": _float(opening), "open_exact": exact(opening),
+            "high": _float(high), "high_exact": exact(high),
+            "low": _float(low), "low_exact": exact(low),
+            "oi": _float(result.get("oi", result.get("open_interest", 0))),
+            "change_24h": _float(change_abs) if change_abs is not None else None,
+            "change_24h_abs": exact(change_abs),
+            "change_24h_pct": exact(change_pct),
+            "ltp_change_24h": exact(delta_dec) if 'delta_dec' in locals() and delta_dec is not None else None,
             "timestamp": result.get("timestamp"),
         }
 
+    # 1) Exact symbol endpoint.
     try:
         response = session.get(f"{BASE_URL}/tickers/{symbol}", timeout=TIMEOUT)
         if response.ok:
             payload = json.loads(response.text, parse_float=Decimal, parse_int=Decimal)
             ticker = normalize(payload.get("result"))
-            if ticker:
+            if ticker and ticker.get("price_exact") not in (None, "", "0", "0.0"):
                 return ticker
     except Exception as exc:
         print(f"Delta direct ticker lookup failed [{symbol}]: {exc}")
 
-    # Some Delta instruments are returned by the ticker collection endpoint even
-    # when the single-symbol route is unavailable. Match the exact product symbol.
+    # 2) Exact match in the unfiltered public ticker list. Do not rely on a
+    # filtered underlying parameter: that parameter can omit otherwise-live alts.
     try:
-        underlying = re.sub(r"(?:USD|USDT)$", "", symbol)
-        response = session.get(
-            f"{BASE_URL}/tickers",
-            params={"underlying_asset_symbols": underlying, "contract_types": "perpetual_futures,futures"},
-            timeout=TIMEOUT,
-        )
+        response = session.get(f"{BASE_URL}/tickers", timeout=TIMEOUT)
         response.raise_for_status()
         payload = json.loads(response.text, parse_float=Decimal, parse_int=Decimal)
         rows = payload.get("result") or []
         if isinstance(rows, dict): rows = [rows]
-        exact = next((x for x in rows if str(x.get("symbol", "")).upper() == symbol), None)
-        ticker = normalize(exact)
-        if ticker:
+        ticker = normalize(rows)
+        if ticker and ticker.get("price_exact") not in (None, "", "0", "0.0"):
             return ticker
     except Exception as exc:
         print(f"Delta ticker-list fallback failed [{symbol}]: {exc}")
+
+    # 3) Filtered ticker-list fallback for API deployments that require filters.
+    try:
+        underlying = re.sub(r"(?:USD|USDT)$", "", symbol)
+        response = session.get(f"{BASE_URL}/tickers", params={"underlying_asset_symbols": underlying}, timeout=TIMEOUT)
+        response.raise_for_status()
+        payload = json.loads(response.text, parse_float=Decimal, parse_int=Decimal)
+        rows = payload.get("result") or []
+        if isinstance(rows, dict): rows = [rows]
+        ticker = normalize(rows)
+        if ticker and ticker.get("price_exact") not in (None, "", "0", "0.0"):
+            return ticker
+    except Exception as exc:
+        print(f"Delta filtered ticker fallback failed [{symbol}]: {exc}")
     return None
 
 
