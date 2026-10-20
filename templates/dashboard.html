@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>NAKSHATRA AI v4.0</title>
-<link rel="stylesheet" href="/static/style.css?v=6.7.0">
+<link rel="stylesheet" href="/static/style.css?v=6.9.0">
 </head>
 <body><div class="container">
 <header class="topbar">
@@ -18,8 +18,8 @@
 <section class="hero-grid-main">
   <section class="card market-hero">
     <div class="section-head"><div><span class="eyebrow">LIVE MARKET</span><h2 id="marketSymbol">BTC/USD</h2></div><span id="dataState" class="live-pill">● LIVE</span></div>
-    <div class="price-line"><div><div id="price" class="price">—</div><div id="change" class="change">—</div></div><div class="day-change"><small>1D CHANGE</small><b id="dayChange">—</b><span id="dayChangePct">—</span></div></div>
-    <div class="market-row"><div><small>DAY HIGH</small><b id="dayHigh">—</b></div><div><small>DAY LOW</small><b id="dayLow">—</b></div><div><small>24H VOLUME</small><b id="dayVolume">—</b></div><div><small>OPEN INTEREST</small><b id="openInterest">—</b></div></div>
+    <div class="price-line"><div><div id="price" class="price">—</div><div id="change" class="change" hidden>—</div></div><div class="day-change"><small>24H PRICE CHANGE</small><b id="dayChange">—</b><span id="dayChangePct">—</span><small id="dayChangeEffect" class="market-effect">Waiting for 24h change data.</small></div></div>
+    <div class="market-row"><div><small>DAY HIGH</small><b id="dayHigh">—</b></div><div><small>DAY LOW</small><b id="dayLow">—</b></div><div><small>24H VOLUME</small><b id="dayVolume">—</b><small id="volumeEffect" class="market-effect">Volume activity interpretation will appear here.</small></div><div><small>OPEN INTEREST</small><b id="openInterest">—</b><small id="oiEffect" class="market-effect">OI change requires comparable historical snapshots.</small></div></div>
   </section>
   <section class="card decision-card"><div class="section-head"><h2>🧠 NAKSHATRA AI DECISION</h2><span id="agreementMini">Agreement —</span></div><strong id="decision">WAIT</strong><span id="confidence">Strength —/100</span><div class="confidence-bar"><i id="confidenceBar"></i></div></section>
 </section>
