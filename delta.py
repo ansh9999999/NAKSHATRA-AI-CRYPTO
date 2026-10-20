@@ -89,29 +89,14 @@ def _timestamp_seconds(value):
 # ==========================================================
 
 def get_ticker(symbol="BTCUSD"):
-    """
-    Get live ticker from Delta Exchange India.
-    """
+    """Fetch one Delta ticker; fall back to the public ticker list if direct lookup fails."""
+    symbol = str(symbol or "BTCUSD").upper().strip()
 
-    symbol = str(symbol).upper().strip()
-
-    try:
-        url = f"{BASE_URL}/tickers/{symbol}"
-
-        response = session.get(
-            url,
-            timeout=TIMEOUT
-        )
-
-        response.raise_for_status()
-
-        payload = json.loads(response.text, parse_float=Decimal, parse_int=Decimal)
-
-        result = payload.get("result")
-
-        if not result:
+    def normalize(result):
+        if isinstance(result, list):
+            result = next((x for x in result if str(x.get("symbol", "")).upper() == symbol), None)
+        if not isinstance(result, dict) or not result:
             return None
-
         price = result.get("close")
         if price is None or price == "": price = result.get("mark_price")
         if price is None or price == "": price = result.get("spot_price")
@@ -138,13 +123,36 @@ def get_ticker(symbol="BTCUSD"):
             "timestamp": result.get("timestamp"),
         }
 
+    try:
+        response = session.get(f"{BASE_URL}/tickers/{symbol}", timeout=TIMEOUT)
+        if response.ok:
+            payload = json.loads(response.text, parse_float=Decimal, parse_int=Decimal)
+            ticker = normalize(payload.get("result"))
+            if ticker:
+                return ticker
     except Exception as exc:
+        print(f"Delta direct ticker lookup failed [{symbol}]: {exc}")
 
-        print(
-            f"Delta ticker error [{symbol}]: {exc}"
+    # Some Delta instruments are returned by the ticker collection endpoint even
+    # when the single-symbol route is unavailable. Match the exact product symbol.
+    try:
+        underlying = re.sub(r"(?:USD|USDT)$", "", symbol)
+        response = session.get(
+            f"{BASE_URL}/tickers",
+            params={"underlying_asset_symbols": underlying, "contract_types": "perpetual_futures,futures"},
+            timeout=TIMEOUT,
         )
-
-        return None
+        response.raise_for_status()
+        payload = json.loads(response.text, parse_float=Decimal, parse_int=Decimal)
+        rows = payload.get("result") or []
+        if isinstance(rows, dict): rows = [rows]
+        exact = next((x for x in rows if str(x.get("symbol", "")).upper() == symbol), None)
+        ticker = normalize(exact)
+        if ticker:
+            return ticker
+    except Exception as exc:
+        print(f"Delta ticker-list fallback failed [{symbol}]: {exc}")
+    return None
 
 
 # ==========================================================
