@@ -82,7 +82,7 @@ function renderOption(o,price){
 function render(a){
  const x=a.analysis||{},t=a.ticker||{},o=x.option_chain||{},it=x.intraday_trend||{},ii=x.intraday_intelligence||{},ast=x.astrology||{},numx=x.numerology||{},sent=x.sentiment||{},ag=x.agreement_detail||{};
  const sess=ii.session||{},ev=ii.events||{},by={};(it.timeframes||[]).forEach(z=>by[z.timeframe]=z);
- const price=num(t.price??t.ltp??x.price);set('marketSymbol',symbol.replace('USD','/USD'));set('price',fmtExact(t.price_exact??t.price??t.ltp??x.price));const chPct=num(t.change_24h_pct);set('change',chPct===null?'24h change unavailable':`24h ${chPct>=0?'+':''}${fmt(chPct,4)}%`);set('dayHigh',fmtExact(t.high_exact??t.high??t.day_high??x.day_high));set('dayLow',fmtExact(t.low_exact??t.low??t.day_low??x.day_low));set('dayVolume',fmt(t.volume,0));set('openInterest',fmt(t.oi??x.open_interest,0));
+ const price=num(t.price??t.ltp??x.price);set('marketSymbol',symbol.replace('USD','/USD'));set('price',fmtExact(t.price_exact??t.price??t.ltp??x.price));const chPct=num(t.change_24h_pct);set('change',chPct===null?'24h change unavailable':`24h ${chPct>=0?'+':''}${fmt(chPct,4)}%`);set('dayHigh',fmtExact(t.high_exact??t.high??t.day_high??x.day_high));set('dayLow',fmtExact(t.low_exact??t.low??t.day_low??x.day_low));set('dayVolume',fmt(t.volume,0));set('openInterest',fmt(t.oi??x.open_interest,0));set('volumeEffect','24h traded amount. High volume confirms a move only when price direction agrees; volume alone is not bullish or bearish.');set('oiEffect', 'Current OI is a snapshot, not OI change. Rising OI + rising price can indicate bullish position build-up; rising OI + falling price can indicate bearish build-up. Falling OI often means positions are closing.');
  const decision=String(x.recommendation||x.signal||'WAIT').toUpperCase();set('decision',decision);set('whyDecision',decision);paintBias('decision',decision);paintBias('whyDecision',decision);const conf=num(x.confidence??x.overall_confidence);set('confidence',`Strength ${fmt(conf,0)}/100`);if($('confidenceBar'))$('confidenceBar').style.width=`${Math.max(0,Math.min(100,conf||0))}%`;
  set('agreementMini',`Agreement ${ag.final||x.agreement||'—'}`);set('agreementMini2',ag.final||x.agreement||'—');paintBias('agreementMini',ag.final||x.agreement);paintBias('agreementMini2',ag.final||x.agreement);
  set('tf5',by['5m']?.trend||'—');set('tf15',by['15m']?.trend||'—');set('tf1h',by['1h']?.trend||'—');set('tf4h',by['4h']?.trend||by['1d']?.trend||'—');set('tf1d',by['1d']?.trend||'—');['tf5','tf15','tf1h','tf4h','tf1d'].forEach(id=>paintBias(id,$(id)?.textContent));
@@ -123,20 +123,28 @@ async function loadStochRsi(){
 }
 
 async function loadDay(ticker){
-  const direct=num(ticker?.change_24h??ticker?.ltp_change_24h);
-  if(direct!==null){
-    const px=num(ticker?.price); const delta=px!==null ? px*(direct/100) : null;
-    set('dayChange',delta!==null?`${direct>=0?'▲':'▼'} ${fmt(Math.abs(delta))}`:`${direct>=0?'▲':'▼'} ${fmt(Math.abs(direct))}`);
-    set('dayChangePct',`${direct>=0?'+':''}${fmt(direct)}%`); ['dayChange','dayChangePct'].forEach(id=>{const el=$(id);if(el){el.classList.remove('bull','bear','sideways');el.classList.add(direct>0?'bull':direct<0?'bear':'sideways')}}); return;
+  const px=num(ticker?.price);
+  let delta=num(ticker?.change_24h_abs);
+  if(delta===null) delta=num(ticker?.change_24h);
+  let pct=num(ticker?.change_24h_pct);
+  if(pct===null && delta!==null && px!==null && (px-delta)!==0) pct=delta/(px-delta)*100;
+  if(delta===null || pct===null){
+    try{
+      const r=await fetch(`/api/market-history?symbol=${encodeURIComponent(symbol)}&resolution=1d&limit=3&_=${Date.now()}`,{cache:'no-store'});
+      const d=await r.json(); const rows=d.rows||[];
+      if(rows.length>=2){const prev=num(rows[rows.length-2].close),last=num(rows[rows.length-1].close);if(prev!==null&&last!==null&&prev!==0){delta=last-prev;pct=delta/prev*100;}}
+    }catch(e){}
   }
-  try{
-    const r=await fetch(`/api/market-history?symbol=${encodeURIComponent(symbol)}&resolution=1d&limit=3&_=${Date.now()}`,{cache:'no-store'});
-    const d=await r.json(); const rows=d.rows||[];
-    if(rows.length>=2){const a=rows[rows.length-2],b=rows[rows.length-1];const prev=num(a.close),last=num(b.close);if(prev&&last){const ch=last-prev,p=ch/prev*100;set('dayChange',`${ch>=0?'▲':'▼'} ${fmt(Math.abs(ch))}`);set('dayChangePct',`${p>=0?'+':''}${fmt(p)}%`);['dayChange','dayChangePct'].forEach(id=>{const el=$(id);if(el){el.classList.remove('bull','bear','sideways');el.classList.add(p>0?'bull':p<0?'bear':'sideways')}});return}}
-    set('dayChange','—');set('dayChangePct','1D data unavailable');
-  }catch(e){set('dayChange','—');set('dayChangePct','1D data unavailable')}
+  if(delta===null || pct===null){set('dayChange','—');set('dayChangePct','Change unavailable');set('dayChangeEffect','No reliable 24h comparison available for this symbol.');paintBias('dayChangeEffect','SIDEWAYS');return;}
+  const dir=pct>0?'bull':pct<0?'bear':'sideways';
+  set('dayChange',`${delta>0?'▲':delta<0?'▼':'•'} ${fmt(Math.abs(delta),8)}`);
+  set('dayChangePct',`${pct>0?'+':''}${fmt(pct,4)}%`);
+  const effect=pct>0?'BULLISH EFFECT: price is up over 24h; buyers have the advantage, but confirm with volume and trend.':pct<0?'BEARISH EFFECT: price is down over 24h; sellers have the advantage, but rebounds remain possible.':'SIDEWAYS EFFECT: net 24h change is near zero; direction is not established.';
+  set('dayChangeEffect',effect);
+  ['dayChange','dayChangePct','dayChangeEffect'].forEach(id=>{const el=$(id);if(el){el.classList.remove('bull','bear','sideways');el.classList.add(dir)}});
 }
-async function load(){if(busy)return;busy=true;try{const r=await fetch(`/api/live?symbol=${encodeURIComponent(symbol)}&_=${Date.now()}`,{cache:'no-store'});const d=await r.json();if(d.status==='OK'){render(d);loadDay(d.ticker||{});loadStochRsi()}else{set('status',d.status==='NO TICKER DATA'?'● NO TICKER DATA':'● DATA RISK');set('dataState',d.status==='NO TICKER DATA'?'● TICKER UNAVAILABLE':'● DATA RISK');set('marketSymbol',symbol.replace('USD','/USD'));['price','change','dayChange','dayChangePct','dayHigh','dayLow','dayVolume','openInterest'].forEach(id=>set(id,'—'));set('updateStatus',d.message||'Data unavailable')}}catch(e){set('status','● OFFLINE');set('dataState','● OFFLINE');['price','change','dayChange','dayChangePct','dayHigh','dayLow','dayVolume','openInterest'].forEach(id=>set(id,'—'));set('updateStatus','Connection error')}finally{busy=false}}
+
+async function load(){if(busy)return;busy=true;try{const r=await fetch(`/api/live?symbol=${encodeURIComponent(symbol)}&_=${Date.now()}`,{cache:'no-store'});const d=await r.json();if(d.status==='OK'){render(d);loadDay(d.ticker||{});loadStochRsi()}else{set('status',d.status==='NO TICKER DATA'?'● NO TICKER DATA':'● DATA RISK');set('dataState',d.status==='NO TICKER DATA'?'● TICKER UNAVAILABLE':'● DATA RISK');set('marketSymbol',symbol.replace('USD','/USD'));['price','change','dayChange','dayChangePct','dayHigh','dayLow','dayVolume','openInterest'].forEach(id=>set(id,'—'));set('dayChangeEffect','Selected coin has no live ticker data.');set('volumeEffect','Volume unavailable for this coin.');set('oiEffect','Open interest unavailable for this coin.');set('updateStatus',d.message||'Data unavailable')}}catch(e){set('status','● OFFLINE');set('dataState','● OFFLINE');['price','change','dayChange','dayChangePct','dayHigh','dayLow','dayVolume','openInterest'].forEach(id=>set(id,'—'));set('dayChangeEffect','Selected coin has no live ticker data.');set('volumeEffect','Volume unavailable for this coin.');set('oiEffect','Open interest unavailable for this coin.');set('updateStatus','Connection error')}finally{busy=false}}
 async function scanner(){try{const r=await fetch('/api/scanner?_='+Date.now(),{cache:'no-store'});const d=await r.json();const arr=Array.isArray(d)?d:(d.markets||[]);$('scanner').innerHTML=arr.map(x=>`<div class="scanner-row"><b>${esc(x.symbol)}</b><span class="${biasClass(x.signal||x.recommendation||'WAIT')}">${esc(x.signal||x.recommendation||'WAIT')}</span><small>${esc(x.strength??x.confidence??'—')}</small></div>`).join('')||'No scanner data'}catch(e){$('scanner').textContent='Scanner unavailable'}}
 async function trades(){try{const r=await fetch('/api/history?_='+Date.now(),{cache:'no-store'});const d=await r.json();const arr=Array.isArray(d)?d:(d.history||[]);$('trades').innerHTML=(arr||[]).slice(-8).reverse().map(x=>`<tr><td>${esc(x.symbol)}</td><td>${esc(x.side)}</td><td>${esc(fmt(x.entry))}</td><td>${esc(fmt(x.pnl))}</td><td>${esc(x.status)}</td></tr>`).join('')||'<tr><td colspan="5">No trades yet</td></tr>';$('equitySummary').textContent=arr?.length?`${arr.length} recorded trades`:'No recorded trades'}catch(e){$('equitySummary').textContent='Trade history unavailable'}}
 async function searchProducts(q){clearTimeout(productTimer);if(!q||q.length<1){$('searchResults').innerHTML='';return}productTimer=setTimeout(async()=>{try{const r=await fetch(`/api/products?q=${encodeURIComponent(q)}`);const d=await r.json();$('searchResults').innerHTML=(d.products||[]).slice(0,8).map(p=>`<button class="result-item" data-symbol="${esc(p.symbol)}"><span class="result-main"><b>${esc(p.symbol)}</b><small>${esc(p.description||p.contract_type||'Delta product')}</small></span><strong class="result-price">${p.price!==null&&p.price!==undefined&&p.price!==''?esc(p.price):'Price unavailable'}</strong></button>`).join('')||'<div class="empty-search">No live Delta crypto found</div>';document.querySelectorAll('.result-item').forEach(b=>b.onclick=()=>selectSymbol(b.dataset.symbol))}catch(e){$('searchResults').innerHTML='<div class="empty-search">Search unavailable</div>'}},120)}

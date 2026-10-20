@@ -197,3 +197,6 @@ small,.eyebrow,.market-row small,.plan-grid small{font-size:15px!important;color
 .decision-conflict{margin-top:12px;padding:14px 16px;border:1px solid #f0a43b;border-left:5px solid #f0a43b;border-radius:12px;background:#281b35;color:#ffd27a;font-size:1rem;font-weight:750;line-height:1.55}
 #price{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .result-price{font-variant-numeric:tabular-nums;overflow-wrap:anywhere;white-space:normal}
+
+/* v6.9: compact market change/volume/OI explanations */
+#change[hidden]{display:none!important}.market-effect{display:block!important;text-transform:none!important;letter-spacing:0!important;font-size:12px!important;line-height:1.45!important;font-weight:600;margin-top:7px;color:#d8c5f2!important}.day-change{min-width:190px}.day-change .market-effect{max-width:280px}.market-row>div{min-width:0}.market-row .market-effect{font-size:11px!important}@media(max-width:620px){.day-change{min-width:135px}.day-change .market-effect{font-size:11px!important}.market-row .market-effect{font-size:11px!important}}
