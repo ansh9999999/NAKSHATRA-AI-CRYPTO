@@ -351,6 +351,26 @@ def api_products(q: str = ""):
             or query in str(x.get("description", "")).upper()
             or query in str(x.get("underlying", "")).upper()
         ]
+        # If the paginated list/search cache omitted an exact product, resolve the
+        # entered ticker directly (DOGEUSD, DOGEUSDT, etc.) before returning empty.
+        direct_candidates = [query]
+        if query.endswith("USDT"):
+            direct_candidates.append(query[:-1])
+        elif query.endswith("USD"):
+            direct_candidates.append(query + "T")
+        elif query.isalpha() and 2 <= len(query) <= 12:
+            direct_candidates.extend([query + "USD", query + "USDT"])
+        known = {x["symbol"] for x in items}
+        for candidate in direct_candidates:
+            if candidate in known:
+                continue
+            item = get_product(candidate)
+            if item and item["symbol"] not in known:
+                items.append(item)
+                known.add(item["symbol"])
+                # Directly resolved symbol is the strongest search match.
+                if candidate == query or item["symbol"] == query:
+                    break
     # Attach live prices to only the first eight visible search results. Prices are
     # cached briefly to avoid hammering Delta while the user types.
     visible = []
@@ -383,15 +403,14 @@ def api_live(symbol: str = "BTCUSD", force: bool = False):
     # Live ticker and candle-analysis availability are separate. For searchable
     # Delta contracts without candle history, still return the real ticker so the
     # UI can show its exact price and mark analysis fields unavailable.
-    response_status = "OK" if ticker is not None else (
-        analysis.get("status", "UNKNOWN") if isinstance(analysis, dict) else "UNKNOWN"
-    )
+    response_status = "OK" if ticker is not None else "NO TICKER DATA"
     return _json_safe({
         "status": response_status,
         "symbol": symbol,
         "ticker": ticker,
         "analysis": analysis,
         "server_time": time.time(),
+        "message": None if ticker is not None else f"Delta listed {symbol}, but its live ticker is unavailable from direct and collection endpoints. Check contract status/symbol on Delta Exchange.",
     })
 
 
