@@ -15,7 +15,10 @@ from contextlib import asynccontextmanager
 import time
 import math
 import json
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation
+import requests
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -38,6 +41,8 @@ _analysis_cache = {}
 _products_cache = {"time": 0, "items": []}
 _product_price_cache = {}
 PRODUCT_PRICE_TTL = 10
+_calendar_cache = {"time": 0, "payload": None}
+CALENDAR_TTL = 300
 
 
 def _json_safe(value):
@@ -426,6 +431,117 @@ def api_live(symbol: str = "BTCUSD", force: bool = False):
         "server_time": time.time(),
         "message": None if ticker is not None else f"Delta listed {symbol}, but its live ticker is unavailable from direct and collection endpoints. Check contract status/symbol on Delta Exchange.",
     })
+
+
+@app.get("/api/calendar")
+def api_calendar(days: int = 7):
+    """Fetch upcoming economic calendar events from TradingView's public calendar feed.
+
+    The feed is an external public endpoint and may occasionally be rate-limited or
+    changed upstream. Never fabricate calendar events when the feed is unavailable.
+    """
+    now = time.time()
+    cached = _calendar_cache.get("payload")
+    if cached and now - _calendar_cache.get("time", 0) < CALENDAR_TTL:
+        return cached
+
+    days = max(1, min(int(days or 7), 14))
+    start = datetime.now(timezone.utc)
+    end = start + timedelta(days=days)
+    url = "https://economic-calendar.tradingview.com/events"
+    params = {
+        "from": start.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "to": end.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "countries": "US,IN,EU,GB,JP,CN",
+    }
+    headers = {
+        "Origin": "https://in.tradingview.com",
+        "Referer": "https://in.tradingview.com/economic-calendar/",
+        "User-Agent": "Mozilla/5.0 (compatible; NakshatraDashboard/7.1)",
+        "Accept": "application/json, text/plain, */*",
+    }
+    try:
+        response = requests.get(url, params=params, headers=headers, timeout=8)
+        response.raise_for_status()
+        body = response.json()
+        raw_events = body.get("result", []) if isinstance(body, dict) else []
+        if not isinstance(raw_events, list):
+            raw_events = []
+        ist = ZoneInfo("Asia/Kolkata")
+        events = []
+        for item in raw_events:
+            if not isinstance(item, dict):
+                continue
+            raw_date = item.get("date") or item.get("datetime") or item.get("time")
+            event_dt = None
+            if isinstance(raw_date, (int, float)):
+                event_dt = datetime.fromtimestamp(raw_date, tz=timezone.utc)
+            elif raw_date:
+                try:
+                    event_dt = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
+                    if event_dt.tzinfo is None:
+                        event_dt = event_dt.replace(tzinfo=timezone.utc)
+                except (ValueError, TypeError):
+                    event_dt = None
+            if event_dt is None or event_dt < start - timedelta(minutes=2) or event_dt > end:
+                continue
+            event_ist = event_dt.astimezone(ist)
+            imp_raw = item.get("importance", item.get("impact", 0))
+            try:
+                imp_num = int(imp_raw)
+            except (ValueError, TypeError):
+                imp_num = 3 if "high" in str(imp_raw).lower() else 2 if "medium" in str(imp_raw).lower() else 1 if "low" in str(imp_raw).lower() else 0
+            imp = "HIGH" if imp_num >= 3 else "MEDIUM" if imp_num == 2 else "LOW" if imp_num == 1 else "UNRATED"
+            country = str(item.get("country") or item.get("currency") or "Global")
+            title = str(item.get("title") or item.get("indicator") or "Economic event")
+            actual = item.get("actual")
+            forecast = item.get("forecast")
+            previous = item.get("previous")
+            is_us = country.upper() in {"US", "USA", "USD", "UNITED STATES"}
+            effect = ("Potentially high volatility for BTC/ETH. For US releases, compare actual vs forecast and watch USD/yields; direction is not guaranteed."
+                      if imp == "HIGH" and is_us else
+                      "Potential volatility for BTC/ETH; check the released value against forecast before assigning bullish or bearish direction."
+                      if imp in {"HIGH", "MEDIUM"} else
+                      "Usually lower scheduled impact; monitor only if the result surprises expectations.")
+            events.append({
+                "name": title,
+                "country": country,
+                "datetime_ist": event_ist.strftime("%a, %d %b • %I:%M %p IST"),
+                "timestamp": int(event_dt.timestamp()),
+                "importance": imp,
+                "impact": imp,
+                "actual": actual,
+                "forecast": forecast,
+                "previous": previous,
+                "effect": effect,
+                "status": "Upcoming • verify release on source",
+                "source": "TradingView Economic Calendar",
+            })
+        events.sort(key=lambda e: e["timestamp"])
+        next_day = start + timedelta(hours=24)
+        high_soon = any(e["importance"] == "HIGH" and e["timestamp"] <= next_day.timestamp() for e in events)
+        payload = {
+            "status": "OK" if events else "EMPTY",
+            "source": "TradingView Economic Calendar",
+            "source_url": "https://in.tradingview.com/economic-calendar/",
+            "updated_ist": datetime.now(ist).strftime("%d %b %Y, %I:%M:%S %p IST"),
+            "risk": "ELEVATED" if high_soon else "NORMAL",
+            "events": events[:20],
+            "disclaimer": "Calendar times are converted to IST. Event effects are conditional, not predictions; actual/forecast may be blank until release.",
+            "message": None if events else "TradingView returned no upcoming events for the selected window.",
+        }
+    except Exception as exc:
+        logger.warning("TradingView calendar fetch failed: %s", str(exc)[:180])
+        payload = {
+            "status": "UNAVAILABLE", "source": "TradingView Economic Calendar",
+            "source_url": "https://in.tradingview.com/economic-calendar/",
+            "updated_ist": None, "risk": "UNCONFIRMED", "events": [],
+            "disclaimer": "Live calendar feed could not be reached. No events are invented; open TradingView calendar to verify schedules.",
+            "message": "TradingView calendar feed unavailable from this server.",
+        }
+    _calendar_cache["time"] = now
+    _calendar_cache["payload"] = payload
+    return payload
 
 
 @app.get("/api/chart")
