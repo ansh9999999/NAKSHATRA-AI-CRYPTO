@@ -13,6 +13,47 @@ function biasClass(v){
  return '';
 }
 function paintBias(id,v){const el=$(id);if(!el)return;el.classList.remove('bull','bear','sideways');const c=biasClass(v);if(c)el.classList.add(c)}
+window.NAKSHATRA_CALENDAR_LIVE=true;
+window.NAKSHATRA_CURRENT_REASONS=[];window.NAKSHATRA_CURRENT_RSI=null;window.NAKSHATRA_STOCH_RSI=window.NAKSHATRA_STOCH_RSI??null;
+function indicatorRead(value,kind){
+ const v=num(value);if(v===null)return {bias:'SIDEWAYS',label:'UNAVAILABLE',detail:'No reliable value returned for this selected coin.'};
+ if(kind==='RSI'){
+  if(v>=55)return {bias:'BULLISH',label:v>=70?'BULLISH • OVERBOUGHT RISK':'BULLISH',detail:v>=70?'Momentum is strong, but RSI is overbought; a pullback is possible.':'RSI above 55 supports positive momentum.'};
+  if(v<=45)return {bias:'BEARISH',label:v<=30?'BEARISH • OVERSOLD RISK':'BEARISH',detail:v<=30?'Momentum is weak, but oversold conditions can bounce.':'RSI below 45 supports negative momentum.'};
+  return {bias:'SIDEWAYS',label:'SIDEWAYS',detail:'RSI is in the middle zone; momentum is not decisive.'};
+ }
+ if(v>=55)return {bias:'BULLISH',label:v>=80?'BULLISH MOMENTUM • OVERBOUGHT':'BULLISH MOMENTUM',detail:v>=80?'Stochastic RSI is overbought; bullish momentum can persist, but pullback risk is elevated.':'Stochastic RSI above 55 shows stronger short-term momentum.'};
+ if(v<=45)return {bias:'BEARISH',label:v<=20?'BEARISH MOMENTUM • OVERSOLD':'BEARISH MOMENTUM',detail:v<=20?'Stochastic RSI is oversold; bearish momentum can persist, but a bounce is possible.':'Stochastic RSI below 45 shows weaker short-term momentum.'};
+ return {bias:'SIDEWAYS',label:'SIDEWAYS',detail:'Stochastic RSI is in the middle zone; wait for a clearer momentum shift.'};
+}
+function renderWhyReasons(){
+ const root=$('reasons');if(!root)return;
+ const rows=(window.NAKSHATRA_CURRENT_REASONS||[]).slice(0,6).map(r=>({text:String(r),bias:biasClass(r)||''}));
+ const rsi=indicatorRead(window.NAKSHATRA_CURRENT_RSI,'RSI');
+ const stoch=indicatorRead(window.NAKSHATRA_STOCH_RSI,'STOCH');
+ rows.push({text:`RSI (14): ${num(window.NAKSHATRA_CURRENT_RSI)===null?'UNAVAILABLE':fmt(window.NAKSHATRA_CURRENT_RSI,2)} — ${rsi.label}. ${rsi.detail}`,bias:rsi.bias});
+ rows.push({text:`Stochastic RSI (14): ${num(window.NAKSHATRA_STOCH_RSI)===null?'UNAVAILABLE':fmt(window.NAKSHATRA_STOCH_RSI,1)+' / 100'} — ${stoch.label}. ${stoch.detail}`,bias:stoch.bias});
+ root.innerHTML=rows.map(r=>`<div class="why-reason ${r.bias?biasClass(r.bias):''}">• ${esc(r.text)}</div>`).join('')||'<div>No high-quality reasons returned.</div>';
+}
+async function loadCalendar(){
+ window.NAKSHATRA_CALENDAR_LIVE=true;
+ try{
+  const r=await fetch(`/api/calendar?days=7&_=${Date.now()}`,{cache:'no-store'});const d=await r.json();
+  const root=$('catalyst');if(!root)return;
+  set('eventRisk',d.risk||'UNCONFIRMED');paintBias('eventRisk',d.risk||'SIDEWAYS');
+  set('eventDisclaimer',`${d.source||'TradingView'} • ${d.updated_ist||'Update unavailable'}. ${d.disclaimer||''}`);
+  if(d.status==='OK'&&Array.isArray(d.events)&&d.events.length){
+   root.innerHTML=d.events.slice(0,10).map(e=>{
+    const nums=[['Actual',e.actual],['Forecast',e.forecast],['Previous',e.previous]].filter(x=>x[1]!==null&&x[1]!==undefined&&x[1]!=='').map(x=>`${x[0]}: ${x[1]}`).join(' • ');
+    return `<div class="catalyst-row calendar-event"><div class="event-main"><strong>${esc(e.name)}</strong><span class="event-time">🕒 ${esc(e.datetime_ist||'Time not supplied')} • ${esc(e.country||'Global')}</span><span class="calendar-impact ${biasClass(e.impact)||'sideways'}">${esc(e.importance||e.impact||'UNRATED')} IMPACT</span><small>${esc(e.effect||'Volatility possible; compare actual vs forecast before assigning direction.')}</small>${nums?`<small class="calendar-values">${esc(nums)}</small>`:''}</div><div class="event-right"><b>${esc(e.importance||'UNRATED')}</b><small>TradingView</small></div></div>`;
+   }).join('');
+   set('gmCalendarStatus','CONNECTED • TradingView');set('gmCalendarNote',`${d.events.length} scheduled event(s) loaded. Times are IST; event effects are conditional, not guaranteed.`);
+  }else{
+   root.innerHTML=`<div class="calendar-status"><b class="${d.status==='UNAVAILABLE'?'sideways':'bull'}">${d.status==='UNAVAILABLE'?'CALENDAR FEED UNAVAILABLE':'NO UPCOMING EVENTS RETURNED'}</b><p>${esc(d.message||'No events found for the selected period.')}</p><a href="${esc(d.source_url||'https://in.tradingview.com/economic-calendar/')}" target="_blank" rel="noopener">Open TradingView Economic Calendar ↗</a></div>`;
+   set('gmCalendarStatus',d.status==='UNAVAILABLE'?'FEED UNAVAILABLE':'NO EVENTS');set('gmCalendarNote',d.disclaimer||'Open TradingView to verify scheduled events.');
+  }
+ }catch(e){const root=$('catalyst');if(root)root.innerHTML='<div class="calendar-status"><b class="sideways">CALENDAR FEED UNAVAILABLE</b><p>Could not load scheduled events. No events are invented.</p><a href="https://in.tradingview.com/economic-calendar/" target="_blank" rel="noopener">Open TradingView Economic Calendar ↗</a></div>';set('gmCalendarStatus','FEED UNAVAILABLE');set('gmCalendarNote','Could not reach the live calendar endpoint.');}
+}
 function paintValueBias(root=document){
  const selector='b,strong,span,td,th,small,div,p,li,h2,h3,label';
  root.querySelectorAll(selector).forEach(el=>{
@@ -24,7 +65,7 @@ function paintValueBias(root=document){
    const c=biasClass(raw);if(c)el.classList.add(c);
  });
 }
-function selectSymbol(s){const next=String(s||'').toUpperCase().trim();if(!next)return;symbol=next;window.NAKSHATRA_SYMBOL=symbol;document.querySelectorAll('.symbol').forEach(b=>b.classList.toggle('active',b.dataset.symbol===symbol));$('cryptoSearch').value='';$('searchResults').innerHTML='';set('marketSymbol',symbol.replace(/(USDT|USD)$/,'/$1'));set('status','● LOADING');set('dataState','● LOADING');set('updateStatus',`Loading ${symbol}…`);['price','dayChange','dayChangePct','dayHigh','dayLow','dayVolume','openInterest'].forEach(id=>set(id,'—'));set('dayChangeEffect','Fetching selected coin ticker…');set('volumeEffect','Fetching selected coin volume…');set('oiEffect','Fetching selected coin open interest…');window.dispatchEvent(new CustomEvent('nakshatra:symbol-changed',{detail:{symbol}}));load()}
+function selectSymbol(s){const next=String(s||'').toUpperCase().trim();if(!next)return;symbol=next;window.NAKSHATRA_SYMBOL=symbol;window.NAKSHATRA_STOCH_RSI=null;renderWhyReasons();document.querySelectorAll('.symbol').forEach(b=>b.classList.toggle('active',b.dataset.symbol===symbol));$('cryptoSearch').value='';$('searchResults').innerHTML='';set('marketSymbol',symbol.replace(/(USDT|USD)$/,'/$1'));set('status','● LOADING');set('dataState','● LOADING');set('updateStatus',`Loading ${symbol}…`);['price','dayChange','dayChangePct','dayHigh','dayLow','dayVolume','openInterest'].forEach(id=>set(id,'—'));set('dayChangeEffect','Fetching selected coin ticker…');set('volumeEffect','Fetching selected coin volume…');set('oiEffect','Fetching selected coin open interest…');window.dispatchEvent(new CustomEvent('nakshatra:symbol-changed',{detail:{symbol}}));load()}
 function normalizeRows(o){
  const raw=Array.isArray(o?.rows)?o.rows:(Array.isArray(o?.atm_chain)?o.atm_chain:[]);
  const grouped=new Map();
@@ -89,9 +130,9 @@ function render(a){
  set('intra5',by['5m']?.trend||'—');set('intra15',by['15m']?.trend||'—');set('intra1h',by['1h']?.trend||'—');set('intra4h',by['4h']?.trend||'—');set('intra1d',by['1d']?.trend||'—');['intra5','intra15','intra1h','intra4h','intra1d'].forEach(id=>paintBias(id,$(id)?.textContent));
  set('activityRegime',sess.activity||'—');set('relativeVolume',ii.relative_volume==null?'—':`${ii.relative_volume}x`);set('volumeRegime',ii.volume_regime||'—');
  renderTradePlan(x,price);set('eventRisk',ev.risk||'NORMAL');set('eventDisclaimer',ev.disclaimer||'Scheduled times are displayed in IST.');
- $('reasons').innerHTML=(x.reasons||[]).slice(0,6).map(r=>`<div>• ${esc(r)}</div>`).join('')||'<div>No high-quality reasons returned.</div>';
+ window.NAKSHATRA_CURRENT_REASONS=Array.isArray(x.reasons)?x.reasons:[];window.NAKSHATRA_CURRENT_RSI=x.rsi;renderWhyReasons();
  const conflict=$('decisionConflict');if(conflict){const bias=String(ag.final||x.agreement||'').toUpperCase();const mismatch=(decision==='SELL'&&bias.includes('BULLISH'))||(decision==='BUY'&&bias.includes('BEARISH'));conflict.hidden=!mismatch;conflict.textContent=mismatch?`SIGNAL CONFLICT: AI says ${decision}, but agreement is ${bias}. Treat as WAIT until technical, options and trend signals align.`:'';}
- if(!window.NAKSHATRA_GLOBAL_CONTEXT){const eventList=(ev.watchlist||ev.upcoming||[]).slice(0,4);$('catalyst').innerHTML=eventList.map(e=>{const dt=e.date_ist||e.time_ist?[e.date_ist,e.time_ist].filter(Boolean).join(' • '):e.datetime_ist||'Time varies (IST)';return `<div class="catalyst-row"><div class="event-main"><strong>${esc(e.name)}</strong><span class="event-time">🕒 ${esc(dt)}</span><span class="effect-label">CRYPTO EFFECT</span><small>${esc(e.effect||'Possible volatility impact; direction depends on actual release vs expectations.')}</small></div><div class="event-right"><b>${esc(e.impact||'—')}</b><small>${esc(e.status||'')}</small></div></div>`}).join('')||'<div class="muted">No scheduled event data.</div>'; }
+ if(!window.NAKSHATRA_GLOBAL_CONTEXT&&!window.NAKSHATRA_CALENDAR_LIVE){const eventList=(ev.watchlist||ev.upcoming||[]).slice(0,4);$('catalyst').innerHTML=eventList.map(e=>{const dt=e.date_ist||e.time_ist?[e.date_ist,e.time_ist].filter(Boolean).join(' • '):e.datetime_ist||'Time varies (IST)';return `<div class="catalyst-row"><div class="event-main"><strong>${esc(e.name)}</strong><span class="event-time">🕒 ${esc(dt)}</span><span class="effect-label">CRYPTO EFFECT</span><small>${esc(e.effect||'Possible volatility impact; direction depends on actual release vs expectations.')}</small></div><div class="event-right"><b>${esc(e.impact||'—')}</b><small>${esc(e.status||'')}</small></div></div>`}).join('')||'<div class="muted">No scheduled event data.</div>'; }
  const tech=x.technical||{};set('moduleTechnical',tech.signal||'—');set('moduleOption',o.signal||'—');set('moduleAstrology',ast.bias||'—');set('moduleAstrology2',ast.bias||'—');set('moduleNumerology',numx.bias||'—');set('moduleNumerology2',numx.bias||'—');set('trend',x.trend||it.overall||'—');paintBias('trend',x.trend||it.overall);paintBias('activityRegime',sess.activity);paintBias('sentimentBias',sent.bias||sent.signal||sent.overall);paintBias('riskState',$('riskState')?.textContent);paintBias('optionView',o.signal||'');
  $('metrics').innerHTML=[['EMA9',x.ema9],['EMA21',x.ema21],['EMA50',x.ema50],['EMA200',x.ema200],['RSI (14)',x.rsi],['Stochastic RSI',window.NAKSHATRA_STOCH_RSI??'Loading…'],['MACD',x.macd],['ATR',x.atr],['Technical Score',tech.score]].map(q=>{const v=num(q[1]);const c=(q[0]==='RSI (14)'||q[0]==='Stochastic RSI')?(v===null?'':v>=60?'bull':v<=40?'bear':'sideways'):(q[0]==='Technical Score'?(v===null?'':v>0?'bull':v<0?'bear':'sideways'):'');return `<div><small>${q[0]}</small><b class="${c}">${fmt(q[1],4)}</b></div>`}).join('');
  $('astroRows').innerHTML=[['Rashi Trend',ast.rashi_trend||ast.bias],['Nakshatra',ast.nakshatra_influence||ast.nakshatra],['Tithi',ast.tithi_impact||ast.tithi],['Yoga',ast.yoga],['Karana',ast.karana],['Planetary',ast.planetary_alignment],['Score',ast.score]].map(q=>`<div><span>${esc(q[0])}</span><b>${esc(q[1])}</b></div>`).join('');
@@ -103,10 +144,12 @@ function render(a){
 }
 
 async function loadStochRsi(){
+ const targetSymbol=symbol;
  try{
-  const res=await fetch(`/api/market-history?symbol=${encodeURIComponent(symbol)}&resolution=5m&limit=100&_=${Date.now()}`,{cache:'no-store'});
+  const res=await fetch(`/api/market-history?symbol=${encodeURIComponent(targetSymbol)}&resolution=5m&limit=100&_=${Date.now()}`,{cache:'no-store'});
+  if(targetSymbol!==symbol)return;
   if(!res.ok)throw Error('history unavailable');
-  const d=await res.json();const rows=Array.isArray(d.rows)?d.rows:[];
+  const d=await res.json();if(targetSymbol!==symbol)return;const rows=Array.isArray(d.rows)?d.rows:[];
   const closes=rows.map(r=>num(r.close)).filter(v=>v!==null);
   if(closes.length<30)throw Error('not enough candles');
   const rsis=[];
@@ -118,8 +161,8 @@ async function loadStochRsi(){
   const val=hi===lo?50:((recent[recent.length-1]-lo)/(hi-lo))*100;
   window.NAKSHATRA_STOCH_RSI=Number(val.toFixed(1));
   const metric=[...document.querySelectorAll('#metrics > div')].find(el=>el.textContent.includes('Stochastic RSI'));
-  if(metric){const b=metric.querySelector('b');if(b)b.textContent=`${val.toFixed(1)} / 100`;const label=val>=80?'OVERBOUGHT':val<=20?'OVERSOLD':val>=55?'BULLISH MOMENTUM':val<=45?'BEARISH MOMENTUM':'SIDEWAYS';if(b){b.classList.remove('bull','bear','sideways');b.classList.add(val>=55?'bull':val<=45?'bear':'sideways')}metric.title=`Stochastic RSI (14): ${label}; extremes can persist in trends.`;}
- }catch(e){window.NAKSHATRA_STOCH_RSI='Unavailable';const metric=[...document.querySelectorAll('#metrics > div')].find(el=>el.textContent.includes('Stochastic RSI'));if(metric){const b=metric.querySelector('b');if(b)b.textContent='Unavailable';}}
+  if(metric){const b=metric.querySelector('b');if(b)b.textContent=`${val.toFixed(1)} / 100`;const label=val>=80?'OVERBOUGHT':val<=20?'OVERSOLD':val>=55?'BULLISH MOMENTUM':val<=45?'BEARISH MOMENTUM':'SIDEWAYS';if(b){b.classList.remove('bull','bear','sideways');b.classList.add(val>=55?'bull':val<=45?'bear':'sideways')}metric.title=`Stochastic RSI (14): ${label}; extremes can persist in trends.`;}renderWhyReasons();
+ }catch(e){if(targetSymbol!==symbol)return;window.NAKSHATRA_STOCH_RSI='Unavailable';const metric=[...document.querySelectorAll('#metrics > div')].find(el=>el.textContent.includes('Stochastic RSI'));if(metric){const b=metric.querySelector('b');if(b)b.textContent='Unavailable';}renderWhyReasons();}
 }
 
 function renderFastTicker(d,requestedSymbol,requestId){if(requestId!==liveRequestSeq||requestedSymbol!==symbol||d.status!=='OK'||!d.ticker)return;const t=d.ticker;set('marketSymbol',requestedSymbol.replace(/(USDT|USD)$/,'/$1'));set('price',fmtExact(t.price_exact??t.price??t.ltp));set('dayHigh',fmtExact(t.high_exact??t.high??t.day_high));set('dayLow',fmtExact(t.low_exact??t.low??t.day_low));set('dayVolume',fmt(t.volume,0));set('openInterest',fmt(t.oi??t.open_interest,0));set('status','● LIVE');set('dataState','● LIVE TICKER');set('updateStatus',`Ticker updated for ${requestedSymbol}`);const pct=num(t.change_24h_pct),bias=pct===null?'SIDEWAYS':pct>0?'BULLISH':pct<0?'BEARISH':'SIDEWAYS';set('volumeEffect',`${bias} PRICE CONTEXT: volume is ${fmt(t.volume,0)}. Volume confirms direction only against a volume baseline; volume alone is not directional.`);paintBias('volumeEffect',bias);set('oiEffect',`SIDEWAYS / UNCONFIRMED: current OI ${fmt(t.oi??t.open_interest,0)} is a snapshot; OI change is not provided by this ticker.`);paintBias('oiEffect','SIDEWAYS');loadDay(t,requestedSymbol,requestId)}
@@ -163,7 +206,7 @@ function enableSectionDropdowns(){
    btn.addEventListener('click',ev=>{ev.preventDefault();ev.stopPropagation();const collapsed=card.classList.toggle('is-collapsed');btn.textContent=collapsed?'+':'−';btn.setAttribute('aria-expanded',String(!collapsed));btn.setAttribute('aria-label',collapsed?'Expand section':'Collapse section');});
  });
 }
-enableSectionDropdowns();
+enableSectionDropdowns();loadCalendar();setInterval(loadCalendar,300000);
 (function enableGlobalMonitorDropdown(){const wrap=document.querySelector('#globalMarketSection');const head=wrap?.querySelector(':scope > .global-title-row');if(!wrap||!head||head.querySelector('.collapse-toggle'))return;const btn=document.createElement('button');btn.type='button';btn.className='collapse-toggle';btn.textContent='−';btn.setAttribute('aria-expanded','true');btn.setAttribute('aria-label','Collapse global intelligence');head.appendChild(btn);btn.addEventListener('click',()=>{const collapsed=wrap.classList.toggle('is-collapsed');btn.textContent=collapsed?'+':'−';btn.setAttribute('aria-expanded',String(!collapsed));btn.setAttribute('aria-label',collapsed?'Expand global intelligence':'Collapse global intelligence')})})();
 // Re-apply semantic colours to every dynamically refreshed section (tables, rows, scanner, option chain).
 paintValueBias();const signalObserver=new MutationObserver(records=>{for(const rec of records){if(rec.type==='childList'){rec.addedNodes.forEach(n=>{if(n.nodeType===1)paintValueBias(n)});}else if(rec.type==='characterData'){const p=rec.target.parentElement;if(p)paintValueBias(p);}}});signalObserver.observe(document.body,{subtree:true,childList:true,characterData:true});
