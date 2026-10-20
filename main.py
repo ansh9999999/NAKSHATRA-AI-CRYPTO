@@ -109,7 +109,9 @@ def _delta_display_price(symbol: str):
             payload = json.loads(response.text, parse_float=Decimal, parse_int=Decimal)
             row = payload.get("result") or {}
             if isinstance(row, list):
-                row = next((x for x in row if str(x.get("symbol", "")).upper() == symbol), {})
+                row = next((x for x in row if isinstance(x, dict) and str(x.get("symbol", "")).upper() == symbol), {})
+            if not isinstance(row, dict) or (row.get("symbol") and str(row.get("symbol")).upper() != symbol):
+                row = {}
             raw = row.get("close") or row.get("mark_price") or row.get("spot_price")
             if raw not in (None, "", 0, "0"):
                 price = format(raw, "f") if isinstance(raw, Decimal) else str(raw).strip()
@@ -381,25 +383,36 @@ def api_products(q: str = ""):
         visible.append(row)
     return {"status": "OK", "count": len(items), "products": visible}
 
+@app.get("/api/ticker")
+def api_ticker(symbol: str = "BTCUSD"):
+    """Fast, exact-symbol ticker endpoint so the market card updates before analytics."""
+    symbol = str(symbol or "BTCUSD").upper().strip()
+    try:
+        ticker = get_ticker(symbol)
+    except Exception as exc:
+        logger.warning("Fast ticker failed %s: %s", symbol, exc)
+        ticker = None
+    if ticker is None:
+        return {"status": "NO TICKER DATA", "symbol": symbol, "ticker": None,
+                "message": f"No exact live ticker returned for {symbol}; no other coin's data was substituted."}
+    return _json_safe({"status": "OK", "symbol": symbol, "ticker": ticker, "server_time": time.time()})
+
+
 @app.get("/api/live")
 def api_live(symbol: str = "BTCUSD", force: bool = False):
     symbol = symbol.upper().strip()
-    product = get_product(symbol)
-    if product is None:
-        valid = {x["symbol"] for x in get_live_products()}
-        if symbol not in valid:
-            return {
-                "status": "NO DATA",
-                "symbol": symbol,
-                "message": "Symbol is not a live Delta Exchange product",
-            }
-    analysis = run_analysis(symbol, force=force)
-
+    # Fetch exact ticker first. A live ticker is sufficient to show the market
+    # card even if the product-list endpoint is temporarily incomplete.
     ticker = None
     try:
         ticker = get_ticker(symbol)
     except Exception as exc:
         logger.warning("Ticker failed %s: %s", symbol, exc)
+    if ticker is None:
+        valid = {x["symbol"] for x in get_live_products()}
+        if symbol not in valid and get_product(symbol) is None:
+            return {"status": "NO DATA", "symbol": symbol, "message": "No live Delta ticker/product found for this exact symbol"}
+    analysis = run_analysis(symbol, force=force)
 
     # Live ticker and candle-analysis availability are separate. For searchable
     # Delta contracts without candle history, still return the real ticker so the
