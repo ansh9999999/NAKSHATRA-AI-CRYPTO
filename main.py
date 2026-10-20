@@ -544,6 +544,57 @@ def api_calendar(days: int = 7):
     return payload
 
 
+@app.get("/api/early-warning")
+def api_early_warning(symbol: str = "BTCUSD", resolution: str = "5m"):
+    """Price-action/volume-only intraday warning. No RSI/MACD/EMA inputs."""
+    sym = symbol.upper().strip()
+    try:
+        df = get_history(sym, resolution, 100)
+        if df is None or df.empty or len(df) < 20:
+            return {"status":"NO_DATA", "symbol":sym, "signal":"DATA UNAVAILABLE", "message":"Not enough recent candles for price-action analysis.", "source":"Delta candle history", "resolution":resolution}
+        rows=[]
+        for _, r in df.tail(100).iterrows():
+            rows.append({k:float(r.get(k,0) or 0) for k in ("open","high","low","close","volume")})
+        last=rows[-1]; prev=rows[-2]
+        recent=rows[-20:-1]
+        prior=rows[-9:-1]
+        price=last['close']; rng=max(last['high']-last['low'], 1e-12)
+        body=last['close']-last['open']; upper=last['high']-max(last['open'],last['close']); lower=min(last['open'],last['close'])-last['low']
+        vol_base=sum(x['volume'] for x in recent)/max(len(recent),1); rvol=(last['volume']/vol_base) if vol_base>0 else None
+        resistance=max(x['high'] for x in recent); support=min(x['low'] for x in recent)
+        prior_high=max(x['high'] for x in prior); prior_low=min(x['low'] for x in prior)
+        reasons=[]; score=0
+        # Early heads-up: proximity to a level plus candle/volume behavior. Breakout is separately confirmed.
+        near_res=price >= resistance-rng*0.6
+        near_sup=price <= support+rng*0.6
+        breakout=last['close']>resistance and last['close']>=last['open']
+        breakdown=last['close']<support and last['close']<=last['open']
+        bullish_reject=lower/rng>=0.38 and last['close']>last['open']
+        bearish_reject=upper/rng>=0.38 and last['close']<last['open']
+        vol_spike=(rvol is not None and rvol>=1.6)
+        if near_res: reasons.append("Price testing recent resistance")
+        if near_sup: reasons.append("Price testing recent support")
+        if bullish_reject: reasons.append("Lower-wick rejection / buyers defended lows")
+        if bearish_reject: reasons.append("Upper-wick rejection / sellers rejected highs")
+        if vol_spike: reasons.append(f"Volume expansion: {rvol:.2f}x recent baseline")
+        if breakout: reasons.append("Close above recent 19-candle resistance: breakout confirmation")
+        if breakdown: reasons.append("Close below recent 19-candle support: breakdown confirmation")
+        if breakout and vol_spike: signal="BULLISH BREAKOUT CONFIRMED"; bias="BULLISH"; score=3
+        elif breakdown and vol_spike: signal="BEARISH BREAKDOWN CONFIRMED"; bias="BEARISH"; score=-3
+        elif near_res and bearish_reject and vol_spike: signal="BEARISH REVERSAL RISK"; bias="BEARISH WATCH"; score=-2
+        elif near_sup and bullish_reject and vol_spike: signal="BULLISH REVERSAL RISK"; bias="BULLISH WATCH"; score=2
+        elif near_res and (bearish_reject or vol_spike): signal="RESISTANCE TEST — WATCH"; bias="REVERSAL RISK"; score=-1
+        elif near_sup and (bullish_reject or vol_spike): signal="SUPPORT TEST — WATCH"; bias="REVERSAL RISK"; score=1
+        elif vol_spike and body>0: signal="UPSIDE MOMENTUM WATCH"; bias="BULLISH WATCH"; score=1
+        elif vol_spike and body<0: signal="DOWNSIDE MOMENTUM WATCH"; bias="BEARISH WATCH"; score=-1
+        else: signal="NO HIGH-CONVICTION SETUP"; bias="SIDEWAYS / WAIT"
+        if not reasons: reasons=["No strong support/resistance, rejection, or abnormal-volume setup in latest candle"]
+        return {"status":"OK","symbol":sym,"resolution":resolution,"signal":signal,"bias":bias,"price":price,"support":support,"resistance":resistance,"relative_volume":round(rvol,2) if rvol is not None else None,"volume_spike":bool(vol_spike),"candle_time":str(df.tail(1).iloc[0].get('time','')),"reasons":reasons,"method":"Recent swing support/resistance + candle rejection/breakout + volume baseline; no lagging indicators","caveat":"Early warning is probabilistic, not a guaranteed prediction. Levels use recent candles and can update as new candles arrive."}
+    except Exception as exc:
+        logger.warning("Early warning failed %s: %s", sym, exc)
+        return {"status":"ERROR","symbol":sym,"signal":"DATA UNAVAILABLE","message":str(exc)}
+
+
 @app.get("/api/chart")
 def api_chart(symbol: str = "BTCUSD", resolution: str = "15m", limit: int = 80):
     try:
